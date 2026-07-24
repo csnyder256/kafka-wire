@@ -335,6 +335,28 @@ to every member of a group. All three are fixed here and covered by tests.
 | [Durability](docs/durability.md) | what survives what |
 | [Operations](docs/operations.md) | metrics, backup, upgrades, troubleshooting |
 | [Examples](examples/) | Go, Python, Node, Java, shell |
+| [Adversarial harness](chaos/) | the attack loop that runs against every push |
+
+## How it is verified
+
+Beyond the usual tests, the repository ships the harness that was built to
+attack its private ancestor, in [`chaos/`](chaos/). It generates a randomized
+universe of principals, topics, groups and ACL grants, runs baseline traffic
+through it, and then tries to break out: reading another principal's topic,
+joining its consumer group, replaying its offsets, brute-forcing the admin
+API, corrupting metadata mid-read, and feeding the wire protocol malformed
+frames. A successful breakout halts the run and dumps a forensic snapshot with
+a seed that reproduces the exact topology.
+
+```sh
+pip install -r chaos/requirements.txt
+./chaos/run.sh 120 4
+```
+
+It runs on every push. Building it is what surfaced the fact that
+authorization was enforced on Produce and Fetch but not on the topic-admin
+APIs, so a principal with no grants could enumerate and delete every topic in
+the cluster. That is fixed, and invariant 9 is why.
 
 ## Contributing
 

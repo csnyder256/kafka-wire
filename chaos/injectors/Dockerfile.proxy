@@ -1,0 +1,12 @@
+FROM python:3.12-slim
+WORKDIR /app
+
+RUN pip install --no-cache-dir aiohttp structlog
+
+COPY services/chaos/__init__.py ./services/chaos/__init__.py
+COPY services/chaos/injectors/ ./services/chaos/injectors/
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "-m", "services.chaos.injectors.s3_chaos"]

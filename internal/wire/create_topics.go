@@ -22,9 +22,18 @@ func (d *Dispatcher) handleCreateTopics(state *connState, hdr RequestHeader, bod
 	resp := kmsg.NewPtrCreateTopicsResponse()
 	resp.SetVersion(hdr.APIVersion)
 
+	acl := d.brk.ACL()
 	for _, t := range req.Topics {
 		rt := kmsg.CreateTopicsResponseTopic{
 			Topic: t.Topic,
+		}
+		// Creating a topic is a write to the cluster's namespace. Without
+		// this check a least-privileged principal could create topics it has
+		// no grant for, which makes every other topic ACL advisory.
+		if acl != nil && !acl.AuthorizeTopic(state.saslPrincipal, t.Topic, "write") {
+			rt.ErrorCode = errCodeTopicAuthorizationFailed
+			resp.Topics = append(resp.Topics, rt)
+			continue
 		}
 		partitions := t.NumPartitions
 		if partitions <= 0 {
@@ -91,9 +100,17 @@ func (d *Dispatcher) handleDeleteTopics(state *connState, hdr RequestHeader, bod
 		}
 	}
 
+	acl := d.brk.ACL()
 	for _, name := range names {
 		rt := kmsg.DeleteTopicsResponseTopic{
 			Topic: stringPtr(name),
+		}
+		// Deleting is the most destructive operation on the wire, so it is
+		// the last place an unauthorized principal should reach.
+		if acl != nil && !acl.AuthorizeTopic(state.saslPrincipal, name, "write") {
+			rt.ErrorCode = errCodeTopicAuthorizationFailed
+			resp.Topics = append(resp.Topics, rt)
+			continue
 		}
 		if err := d.brk.DeleteTopic(name); err != nil {
 			if errors.Is(err, broker.ErrUnknownTopic) {

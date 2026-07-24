@@ -65,10 +65,24 @@ func (h *handlers) acls(w http.ResponseWriter, r *http.Request) {
 			"principals": acl.All(),
 		})
 	case http.MethodPost:
-		var p broker.Principal
-		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		// Principal.Name is the map key in the stored file and carries
+		// `json:"-"`, so decoding a request body straight into it always
+		// produced an unnamed principal and a "principal name required"
+		// rejection: the endpoint could not create anything. The request
+		// shape is therefore its own type, with the name in the body.
+		var req struct {
+			Name          string                  `json:"name"`
+			TopicPrefixes []broker.TopicPrefixACL `json:"topic_prefixes"`
+			Groups        []broker.GroupPrefixACL `json:"groups"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		p := broker.Principal{
+			Name:          req.Name,
+			TopicPrefixes: req.TopicPrefixes,
+			Groups:        req.Groups,
 		}
 		if err := acl.Upsert(p); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())

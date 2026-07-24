@@ -1,0 +1,2 @@
+aiokafka>=0.10
+structlog>=24.1

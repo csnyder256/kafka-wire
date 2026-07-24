@@ -70,6 +70,14 @@ func (d *Dispatcher) handleDescribeGroups(state *connState, hdr RequestHeader, b
 	}
 
 	for _, gid := range req.Groups {
+		if acl := d.brk.ACL(); acl != nil && !acl.AuthorizeGroup(state.saslPrincipal, gid, "read") {
+			resp.Groups = append(resp.Groups, kmsg.DescribeGroupsResponseGroup{
+				Group:                gid,
+				ErrorCode:            errCodeGroupAuthorizationFailed,
+				AuthorizedOperations: -2147483648,
+			})
+			continue
+		}
 		rg := kmsg.DescribeGroupsResponseGroup{
 			Group: gid,
 			// See the note in metadata.go: zero here reads as "authorized

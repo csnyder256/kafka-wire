@@ -27,7 +27,21 @@ func (d *Dispatcher) handleListOffsets(state *connState, hdr RequestHeader, body
 	resp := kmsg.NewPtrListOffsetsResponse()
 	resp.SetVersion(hdr.APIVersion)
 
+	acl := d.brk.ACL()
 	for _, t := range req.Topics {
+		// Offsets disclose how much traffic a topic carries, so they follow
+		// the same read grant the records themselves do.
+		if acl != nil && !acl.AuthorizeTopic(state.saslPrincipal, t.Topic, "read") {
+			rt := kmsg.ListOffsetsResponseTopic{Topic: t.Topic}
+			for _, part := range t.Partitions {
+				rt.Partitions = append(rt.Partitions, kmsg.ListOffsetsResponseTopicPartition{
+					Partition: part.Partition,
+					ErrorCode: errCodeTopicAuthorizationFailed,
+				})
+			}
+			resp.Topics = append(resp.Topics, rt)
+			continue
+		}
 		rt := kmsg.ListOffsetsResponseTopic{Topic: t.Topic}
 		for _, p := range t.Partitions {
 			rp := kmsg.ListOffsetsResponseTopicPartition{

@@ -167,3 +167,21 @@ jobs:
             echo "Regenerate it: kafka-wire config reference > docs/configuration.md"
             exit 1
           fi
+
+  chaos:
+    name: adversarial harness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.25', cache: true }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      # A short run on every push. The harness is built to run for hours, but
+      # 90 seconds is enough to exercise every adversary module at least once,
+      # and a violation halts immediately rather than at the end.
+      - name: Attack the broker
+        run: |
+          pip install --quiet -r chaos/requirements.txt
+          ./chaos/run.sh 90 4

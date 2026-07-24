@@ -57,7 +57,26 @@ func (d *Dispatcher) handleMetadata(state *connState, hdr RequestHeader, body []
 
 	autoCreate := req.AllowAutoTopicCreation && d.brk.AutoCreateTopics()
 
+	// Metadata is a discovery API: listing every topic in the cluster to a
+	// principal that cannot read any of them leaks the topic namespace, which
+	// is usually a map of somebody's business. Filter to what the principal
+	// can actually see. A topic that was asked for by name and is not visible
+	// is reported as unknown rather than as forbidden, matching what Kafka
+	// does and avoiding a probe that confirms existence.
+	acl := d.brk.ACL()
 	for _, name := range names {
+		if acl != nil && !acl.AuthorizeTopic(state.saslPrincipal, name, "read") &&
+			!acl.AuthorizeTopic(state.saslPrincipal, name, "write") {
+			if includeAll {
+				continue
+			}
+			resp.Topics = append(resp.Topics, kmsg.MetadataResponseTopic{
+				Topic:                stringPtr(name),
+				ErrorCode:            errCodeUnknownTopicOrPart,
+				AuthorizedOperations: -2147483648,
+			})
+			continue
+		}
 		t := registry.Get(name)
 		if t == nil && autoCreate {
 			created, err := d.brk.EnsureTopic(name, 1)

@@ -10,3 +10,8 @@
 # local config, which usually holds credentials
 /kafka-wire.yaml
 /kafka-wire.yml
+
+# python
+__pycache__/
+*.pyc
+chaos-forensics/
