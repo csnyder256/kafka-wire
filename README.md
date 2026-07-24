@@ -350,7 +350,7 @@ a seed that reproduces the exact topology.
 
 ```sh
 pip install -r chaos/requirements.txt
-./chaos/run.sh 120 4
+bash chaos/run.sh 120 4
 ```
 
 It runs on every push. Building it is what surfaced the fact that
