@@ -144,7 +144,7 @@ func TestFileIndirectionTrimsTrailingNewline(t *testing.T) {
 	secret := filepath.Join(dir, "token")
 	os.WriteFile(secret, []byte("s3cr3t-value\n"), 0o600)
 
-	l, err := Load(Options{
+	_, err := Load(Options{
 		File:      filepath.Join(dir, "absent.yaml"),
 		LookupEnv: env(map[string]string{"KAFKA_WIRE_ADMIN_TOKEN_FILE": secret}),
 		ReadFile:  os.ReadFile,
@@ -155,7 +155,7 @@ func TestFileIndirectionTrimsTrailingNewline(t *testing.T) {
 		t.Fatal("expected explicit missing config file to be an error")
 	}
 
-	l, err = Load(Options{
+	l, err := Load(Options{
 		LookupEnv: env(map[string]string{"KAFKA_WIRE_ADMIN_TOKEN_FILE": secret}),
 	})
 	if err != nil {

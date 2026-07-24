@@ -264,7 +264,7 @@ func (b *Broker) ClusterID() string { return b.cfg.ClusterID }
 func (b *Broker) AdvertisedHost() string { return b.cfg.AdvertisedHost }
 func (b *Broker) AdvertisedPort() int32  { return b.cfg.AdvertisedPort }
 
-// MaxRequestBytes: the wire layer's DoS cap.
+// MaxRequestBytes reports the wire layer's cap on a single request.
 func (b *Broker) MaxRequestBytes() int32 { return b.cfg.MaxRequestBytes }
 
 // Topics is the registry handle (used by retention reaper + admin API).

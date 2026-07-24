@@ -117,8 +117,12 @@ jobs:
       - name: Binary payloads survive kcat
         run: |
           head -c 65536 /dev/urandom > blob.bin
-          kcat -b 127.0.0.1:9092 -t ci.blob -P < blob.bin
-          kcat -b 127.0.0.1:9092 -t ci.blob -C -o beginning -e -c 1 > blob.out
+          # -D '' disables kcat's line delimiter. Without it kcat splits the
+          # input on every newline byte, which a random blob is full of, and
+          # the comparison fails for a reason that has nothing to do with the
+          # broker.
+          kcat -b 127.0.0.1:9092 -t ci.blob -P -D '' < blob.bin
+          kcat -b 127.0.0.1:9092 -t ci.blob -C -o beginning -e -c 1 -D '' > blob.out
           cmp blob.bin blob.out
 
       - name: Broker log

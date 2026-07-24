@@ -339,8 +339,8 @@ func (s *stats) markFailed(err error) {
 	s.lastError = err.Error()
 }
 
-// Snapshot returns the current stats per subscription. Used by the
-// admin /v1/webhooks endpoint.
+// SubscriptionStatus is the delivery health of one webhook subscription,
+// as reported by the admin API.
 type SubscriptionStatus struct {
 	Topic           string    `json:"topic"`
 	URL             string    `json:"url"`

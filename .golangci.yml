@@ -4,6 +4,19 @@ version: "2"
 linters:
   default: standard
   settings:
+    errcheck:
+      # Closing a reader we are done with, or flushing on the way out, has no
+      # useful failure handling: the data is already read, or the process is
+      # already exiting. Listing them beats sprinkling "_ =" everywhere.
+      exclude-functions:
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (*os.File).Close
+        - (net.Conn).Close
+        - (*compress/gzip.Writer).Close
+        - (*bufio.Writer).Flush
+        - fmt.Fprintf
+        - fmt.Fprintln
     staticcheck:
       checks:
         - all
