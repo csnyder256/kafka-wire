@@ -1,7 +1,6 @@
 {
   "users": {
-    "_comment": "Generated SCRAM-SHA-256 credentials, one per application.",
-    "orders-service": "<scram-sha-256-credential>",
-    "analytics-reader": "<scram-sha-256-credential>"
+    "orders-service": "replace-with-a-generated-password",
+    "analytics-reader": "replace-with-a-different-generated-password"
   }
 }

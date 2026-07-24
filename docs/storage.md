@@ -24,11 +24,14 @@ looks inside a record.
 
 ## The cold tier
 
-Sealed segments older than `archive.age` are uploaded. After
-`archive.localretention` the local `.log` is deleted while its much smaller
-index files stay behind. A consumer asking for an offset that now lives only in
-cold storage triggers a transparent restore into an on-disk LRU cache, verified
-against the SHA-256 recorded at upload time.
+Sealed segments older than `archive.age` are uploaded. A consumer asking for
+an offset that is missing locally triggers a transparent restore into an
+on-disk LRU cache, verified against the SHA-256 recorded at upload time.
+
+**Local copies are not deleted after archiving yet.** Archived segments stay on
+local disk until ordinary retention (`storage.retentionage`,
+`storage.retentionsize`) removes them, so cold storage is currently a second
+copy rather than a way to shrink the local footprint.
 
 None of this is on by default.
 

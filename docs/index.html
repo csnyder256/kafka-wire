@@ -134,16 +134,20 @@ footer { margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--rule);
 <p class="note">If your workload fits on one machine and you would rather own it than operate a cluster, this is built for you. If it does not, it is not.</p>
 
 <h2>Does my Kafka client work?</h2>
-<p>Yes. The one accommodation: the Apache Kafka <strong>Java</strong> client has defaulted
-<code>enable.idempotence=true</code> since 3.0, which requires an API a broker with no
-transaction coordinator does not have. Set <code>enable.idempotence=false</code>.
-librdkafka-based clients already default it off.</p>
+<p>Yes. The one accommodation: any client that turns idempotent producing on by
+default needs it switched off, because idempotence requires an API a broker with no
+transaction coordinator does not have. That is the Apache Kafka <strong>Java</strong>
+client (default since 3.0) and <strong>kafka-python 3.x</strong>. Set
+<code>enable.idempotence=false</code>, or <code>enable_idempotence=False</code> in
+Python. librdkafka-based clients and kafka-python 2.x already default it off.</p>
 <table>
   <tr><th>Client</th><th>Works</th></tr>
-  <tr><td>kcat, kafka-python, aiokafka</td><td>yes</td></tr>
+  <tr><td>kcat, kafka-python 2.x</td><td>yes</td></tr>
+  <tr><td>kafka-python 3.x</td><td>yes, with the setting above</td></tr>
   <tr><td>confluent-kafka (Python, Go, .NET), librdkafka</td><td>yes</td></tr>
   <tr><td>KafkaJS, franz-go, Sarama, segmentio/kafka-go</td><td>yes</td></tr>
   <tr><td>Apache Kafka Java client 3.x / 4.x</td><td>yes, with the setting above</td></tr>
+  <tr><td>Kafka Connect, Debezium</td><td>partial, no transactions</td></tr>
   <tr><td>Kafka Streams, ksqlDB</td><td>no, needs transactions</td></tr>
 </table>
 

@@ -18,7 +18,6 @@ import (
 
 // Config tunes the uploader.
 type Config struct {
-	Bucket         string
 	Prefix         string        // e.g. "kafka-wire-archive/"
 	ArchiveAge     time.Duration // sealed segment must be at least this old
 	LocalRetention time.Duration // delete local copy after this once archived
@@ -109,8 +108,13 @@ func NewUploader(cfg Config, store objstore.Store, manifest *Manifest, mreg Metr
 
 // Run drives the uploader loop. Cancel by calling Stop or ctx done.
 func (u *Uploader) Run(ctx context.Context, provider LogProvider) {
-	if u.cfg.Bucket == "" {
-		slog.Info("s3.uploader.disabled", "reason", "no bucket configured")
+	// Whether cold storage is on is decided by whether a backend was
+	// constructed at all, which is the openArchive switch in serve.go. This
+	// used to gate on a Bucket string that only the S3 driver ever had, so
+	// once the backend interface replaced it the sweeper silently returned
+	// immediately for every backend, including fs.
+	if u.store == nil {
+		slog.Info("archive.uploader.disabled", "reason", "no cold storage backend configured")
 		return
 	}
 

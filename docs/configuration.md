@@ -26,15 +26,6 @@ error rather than a silent precedence puzzle.
 
 There is no `${VAR}` interpolation inside the YAML, and there will not be.
 
-## Sizes and durations
-
-Sizes accept a plain byte count or a suffix: `1GiB`, `512MB`, `16KiB`, `64M`.
-Durations accept Go syntax (`30s`, `168h`, `1h30m`) and also a bare integer,
-which is read as milliseconds so values copied from a Kafka config behave as
-their names suggest.
-
-## Every setting
-
 
 LISTENERS
 ---------
@@ -198,10 +189,6 @@ AUTH
   auth.usersfile  (string, default "")
     path to the JSON file holding SCRAM credentials. Required when auth.saslenabled is true
     env: KAFKA_WIRE_AUTH_USERSFILE
-
-  auth.aclenabled  (bool, default false)
-    enforce per-principal access control lists
-    env: KAFKA_WIRE_AUTH_ACLENABLED
 
   auth.allowanon  (bool, default false)
     permit a non-loopback listener with authentication disabled. The broker refuses to start without this, on purpose

@@ -123,7 +123,6 @@ type LimitsConfig struct {
 type AuthConfig struct {
 	SASLEnabled bool   `yaml:"saslenabled" def:"false" doc:"require SASL authentication on the Kafka listener"`
 	UsersFile   string `yaml:"usersfile" def:"" doc:"path to the JSON file holding SCRAM credentials. Required when auth.saslenabled is true"`
-	ACLEnabled  bool   `yaml:"aclenabled" def:"false" doc:"enforce per-principal access control lists"`
 	AllowAnon   bool   `yaml:"allowanon" def:"false" doc:"permit a non-loopback listener with authentication disabled. The broker refuses to start without this, on purpose"`
 }
 

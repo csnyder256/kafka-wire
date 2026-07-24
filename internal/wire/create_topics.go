@@ -45,9 +45,15 @@ func (d *Dispatcher) handleCreateTopics(state *connState, hdr RequestHeader, bod
 		}
 
 		if _, err := d.brk.CreateTopic(t.Topic, partitions, repFactor); err != nil {
-			if errors.Is(err, broker.ErrTopicExists) {
+			switch {
+			case errors.Is(err, broker.ErrTopicExists):
 				rt.ErrorCode = errCodeTopicAlreadyExists
-			} else {
+			case errors.Is(err, broker.ErrInvalidName):
+				// A rejected name or partition count is not a partition-count
+				// problem specifically, and clients surface the code.
+				rt.ErrorCode = errCodeInvalidTopic
+				rt.ErrorMessage = stringPtr(err.Error())
+			default:
 				rt.ErrorCode = errCodeInvalidPartitions
 				rt.ErrorMessage = stringPtr(err.Error())
 			}

@@ -15,7 +15,7 @@ import (
 // validate the batch headers, rewrite BaseOffsets to absolute
 // partition offsets, and append verbatim.
 //
-// this build implements `acks=1` semantics (the some clients default):
+// this build implements `acks=1` semantics (the common client default):
 // we return as soon as the bytes hit the active segment's page cache.
 // fsync happens asynchronously via the storage's group-commit timer.
 // `acks=-1 / all` is treated identically in single-node mode (no

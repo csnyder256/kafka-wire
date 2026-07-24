@@ -112,7 +112,9 @@ KafkaProducer(..., enable_idempotence=False)   # kafka-python 3.x
 ```
 
 Clients built on librdkafka default it off already, as do kafka-python 2.x,
-KafkaJS, Sarama and franz-go. Everything else works unchanged.
+KafkaJS and Sarama. franz-go turns it on by default but degrades gracefully
+when the broker does not advertise the API, so it works either way.
+Everything else works unchanged.
 
 What you give up is producer-side deduplication of retries. It is not emulated,
 because a broker that accepted `InitProducerId` and then ignored sequence
@@ -186,7 +188,7 @@ Anywhere that gives you a persistent disk and a raw TCP port.
 | Kubernetes | [`deploy/kubernetes`](deploy/kubernetes) (StatefulSet, PVC, probes, PDB) |
 | systemd on a VM | [`deploy/systemd`](deploy/systemd) (hardened unit) |
 | Nomad | [`deploy/nomad`](deploy/nomad) |
-| Fly.io, the hosting platform, Render, Koyeb, Hetzner, EC2 | [`deploy/paas`](deploy/paas/README.md) |
+| Fly.io, Railway, Render, Koyeb, Hetzner, EC2 | [`deploy/paas`](deploy/paas/README.md) |
 | Raspberry Pi / ARM64 | multi-arch images and binaries |
 
 Platforms with an ephemeral filesystem or HTTP-only routing (Cloud Run, Heroku,
@@ -262,11 +264,13 @@ gaps at runtime.
 | DeleteTopics | 0-5 | | DescribeConfigs | 0-4 |
 | ApiVersions | 0-3 | | SaslHandshake / SaslAuthenticate | 0-1 / 0-2 |
 
-Not implemented: `InitProducerId`, `AddPartitionsToTxn`, `EndTxn`, `TxnOffsetCommit`
-(no transactions), `DescribeLogDirs`, `AlterConfigs`, `DeleteRecords`,
-`DescribeAcls`, `ElectLeaders`. An unimplemented API returns a correctly-typed
-response carrying `UNSUPPORTED_VERSION`, so a client fails cleanly instead of
-desynchronizing.
+Anything not in that table is not implemented. Notably absent: `InitProducerId`,
+`AddPartitionsToTxn`, `EndTxn` and `TxnOffsetCommit` (no transactions),
+`DeleteGroups`, `CreatePartitions`, `OffsetForLeaderEpoch`, `DescribeLogDirs`,
+`DescribeCluster`, `AlterConfigs`, `IncrementalAlterConfigs`, `DeleteRecords`,
+`OffsetDelete`, and the ACL and SCRAM admin APIs. An unimplemented API returns a
+correctly-typed response carrying `UNSUPPORTED_VERSION`, so a client fails
+cleanly instead of desynchronizing.
 
 ## Durability, stated plainly
 

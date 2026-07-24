@@ -170,6 +170,14 @@ func (s *OffsetStore) Persist(gs *GroupState) error {
 // CommitOffset records (or overwrites) one committed offset for a
 // group/topic/partition.
 func (s *OffsetStore) CommitOffset(groupID, topic string, partition int32, offset int64, leaderEpoch int32, metadata string) error {
+	// Committing writes groups/<id>.json, so an unvalidated id would place a
+	// file anywhere the process can write.
+	if err := ValidateName("group", groupID); err != nil {
+		return err
+	}
+	if err := ValidateName("topic", topic); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	gs, ok := s.groups[groupID]
 	if !ok {

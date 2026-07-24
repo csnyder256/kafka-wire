@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"sync"
 
@@ -329,6 +330,15 @@ func (b *Broker) EnsureTopicForTenant(name string, partitions int32, tenantID st
 // it already exists (creation is not idempotent; use the admin API to update an
 // existing topic).
 func (b *Broker) CreateTopic(name string, partitions int32, replicationFactor int16) (*Topic, error) {
+	// The name arrives from the network and becomes a directory name, so it is
+	// validated before anything touches the filesystem.
+	if err := ValidateName("topic", name); err != nil {
+		return nil, err
+	}
+	if partitions > MaxPartitionsPerTopic {
+		return nil, fmt.Errorf("%w: %d partitions requested, the limit is %d",
+			ErrInvalidName, partitions, MaxPartitionsPerTopic)
+	}
 	cfg := TopicConfig{
 		NumPartitions:     partitions,
 		ReplicationFactor: replicationFactor,
@@ -350,14 +360,21 @@ func (b *Broker) CreateTopic(name string, partitions int32, replicationFactor in
 // partitions, and rm -rf's its data directory. The admin API gates
 // this; this build does not expose it on the wire.
 func (b *Broker) DeleteTopic(name string) error {
+	// This path ends in a recursive delete, so the name is validated even
+	// though the topic must already exist to get here.
+	if err := ValidateName("topic", name); err != nil {
+		return err
+	}
 	if err := b.topics.Delete(name); err != nil {
 		return err
 	}
 	if err := b.persistTopicsLocked(); err != nil {
 		return err
 	}
-	// Best-effort delete of the on-disk topic directory.
-	dir := b.cfg.Storage.TopicsDir() + "/" + name
+	// Best-effort delete of the on-disk topic directory. filepath.Join rather
+	// than concatenation, so the path cannot be built out of a name that
+	// slipped through.
+	dir := filepath.Join(b.cfg.Storage.TopicsDir(), name)
 	return removeAllSafe(dir)
 }
 

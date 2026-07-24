@@ -170,7 +170,25 @@ FLAGS
 	defer func() { _ = out.Flush() }()
 
 	seen := 0
+	// When --timeout is set it bounds the whole command, not just one poll.
+	// A client that cannot reach the broker simply polls empty forever, so
+	// without this the command either hangs or exits 0 having read nothing,
+	// and a dead broker looks exactly like an empty topic.
+	var overall time.Time
+	if *timeout > 0 {
+		overall = time.Now().Add(*timeout)
+	}
 	for {
+		if !overall.IsZero() && time.Now().After(overall) {
+			_ = out.Flush()
+			if seen == 0 {
+				return fmt.Errorf("read no records from %s within %s\n"+
+					"  Is the broker running, and does the topic %q exist?\n"+
+					"  Check with: kafka-wire topic list --brokers %s",
+					*brokers, *timeout, topic, *brokers)
+			}
+			return nil
+		}
 		pollCtx := ctx
 		var cancel context.CancelFunc
 		if *timeout > 0 {
@@ -189,6 +207,16 @@ FLAGS
 		if errs := fetches.Errors(); len(errs) > 0 {
 			if *timeout > 0 && errors.Is(errs[0].Err, context.DeadlineExceeded) {
 				_ = out.Flush()
+				// Having read something and then gone quiet is a normal end
+				// of stream. Having read nothing means the broker was never
+				// reached or the topic does not exist, and calling that
+				// success is how a dead broker looks like an empty topic.
+				if seen == 0 {
+					return fmt.Errorf("read no records from %s within %s\n"+
+						"  Is the broker running, and does the topic %q exist?\n"+
+						"  Check with: kafka-wire topic list --brokers %s",
+						*brokers, *timeout, topic, *brokers)
+				}
 				return nil
 			}
 			if errors.Is(errs[0].Err, context.Canceled) {

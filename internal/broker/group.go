@@ -258,7 +258,9 @@ type JoinGroupArgs struct {
 // JoinGroup with a long timeout and wait for the coordinator to answer once
 // the generation is settled.
 func (g *GroupCoordinator) JoinGroup(args JoinGroupArgs) (*JoinGroupResult, error) {
-	if args.GroupID == "" {
+	// The group id becomes a file name under groups/, so it is validated for
+	// the same reason topic names are.
+	if err := ValidateName("group", args.GroupID); err != nil {
 		return &JoinGroupResult{ErrorCode: invalidGroupID}, nil
 	}
 

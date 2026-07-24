@@ -8,10 +8,12 @@ The admin listener serves:
 |---|---|
 | `/health` | liveness and readiness. 200 once the log has been recovered and the listener is accepting. |
 | `/metrics` | Prometheus exposition |
-| `/api/cluster` | cluster identity and broker address |
-| `/api/topics` | topics, partitions, offsets, sizes |
-| `/api/groups` | consumer groups, members, committed offsets |
-| `/api/archive` | archived segments and in-flight uploads |
+| `/v1/cluster` | cluster identity and broker address |
+| `/v1/topics`, `/v1/topics/{name}` | topics, partitions, offsets, sizes |
+| `/v1/groups`, `/v1/groups/{id}` | consumer groups, members, committed offsets |
+| `/v1/archive` | archived segments and in-flight uploads |
+| `/v1/acls`, `/v1/acls/{principal}` | access control entries |
+| `/v1/replay/reset-offset` | move a consumer group's committed offset |
 
 Everything except `/health` requires `Authorization: Bearer <admin.token>` when
 a token is set. `/health` stays open because orchestrator probes cannot carry
@@ -30,8 +32,8 @@ In rough order of how much trouble you are in:
    producers start seeing retriable errors. Alert well before that point.
 2. **Consumer group lag growing without bound.** The consumer is slower than the
    producer, or it is dead.
-3. **Archive failures.** If uploads are failing, cold storage is not a second
-   copy any more, and local retention will eventually delete the only copy.
+3. **Archive failures.** If uploads are failing, cold storage has stopped being
+   a second copy, and ordinary retention will eventually delete the local one.
 4. **No produce traffic on a topic that normally has some.** Usually a client
    problem, but it is the earliest signal of one.
 5. **Restore failures.** Consumers reading old offsets cannot make progress.
