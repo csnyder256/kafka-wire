@@ -1,0 +1,102 @@
+# kubectl apply -f deploy/kubernetes/statefulset.yaml
+#
+# A StatefulSet with one replica, not a Deployment: the broker owns a
+# persistent volume and a stable network identity, and two copies pointed at
+# the same volume would corrupt the log.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-wire
+  labels: { app: kafka-wire }
+spec:
+  # Headless, so the pod gets the stable DNS name it advertises to clients.
+  clusterIP: None
+  selector: { app: kafka-wire }
+  ports:
+    - { name: kafka, port: 9092, targetPort: kafka }
+    - { name: admin, port: 8080, targetPort: admin }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-wire-config
+data:
+  kafka-wire.yaml: |
+    listeners:
+      kafka: "0.0.0.0:9092"
+      admin: "0.0.0.0:8080"
+    storage:
+      datadir: "/data"
+    auth:
+      # In-cluster only, reached through a headless Service. Turn on SASL
+      # (see docs/security.md) before exposing this outside the cluster.
+      allowanon: true
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka-wire
+spec:
+  serviceName: kafka-wire
+  replicas: 1
+  selector: { matchLabels: { app: kafka-wire } }
+  template:
+    metadata:
+      labels: { app: kafka-wire }
+    spec:
+      terminationGracePeriodSeconds: 40   # must exceed shutdown.grace
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532                    # makes the PVC writable by the user
+      containers:
+        - name: kafka-wire
+          image: ghcr.io/csnyder256/kafka-wire:latest
+          args: ["serve", "--config", "/etc/kafka-wire/kafka-wire.yaml"]
+          ports:
+            - { name: kafka, containerPort: 9092 }
+            - { name: admin, containerPort: 8080 }
+          env:
+            # The stable per-pod DNS name, which is what clients must be told
+            # to reconnect to. Getting this wrong is the classic Kafka-on-
+            # Kubernetes failure: clients connect, then hang.
+            - name: KAFKA_WIRE_LISTENERS_ADVERTISEDHOST
+              value: "kafka-wire-0.kafka-wire.$(POD_NAMESPACE).svc.cluster.local"
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+          # Recovering a large log can take a while, and /health does not
+          # answer until it finishes. A startupProbe buys that time without
+          # making the liveness check permanently slack.
+          startupProbe:
+            httpGet: { path: /health, port: admin }
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: { path: /health, port: admin }
+            periodSeconds: 15
+            failureThreshold: 4
+          readinessProbe:
+            httpGet: { path: /health, port: admin }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits:   { memory: "2Gi" }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: config, mountPath: /etc/kafka-wire }
+      volumes:
+        - name: config
+          configMap: { name: kafka-wire-config }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: 20Gi } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kafka-wire
+spec:
+  maxUnavailable: 1
+  selector: { matchLabels: { app: kafka-wire } }

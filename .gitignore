@@ -1,0 +1,12 @@
+# build output
+/kafka-wire
+/kafka-wire.exe
+/dist/
+
+# runtime state
+/kafka-wire-data/
+*.log
+
+# local config, which usually holds credentials
+/kafka-wire.yaml
+/kafka-wire.yml

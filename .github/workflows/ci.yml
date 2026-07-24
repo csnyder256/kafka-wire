@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The broker is meant to run on a server and be developed on a laptop, so it
+  # is built and tested on all three platforms rather than assumed portable.
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -timeout 15m
+
+  race:
+    name: race detector
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24', cache: true }
+      # The broker is one goroutine per connection plus background sweepers, so
+      # the race detector is the test that matters most.
+      - run: go test -race ./... -timeout 20m
+
+  objstore:
+    name: object store conformance (MinIO)
+    runs-on: ubuntu-latest
+    services:
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports: ['9000:9000']
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24', cache: true }
+      # The same conformance suite that runs against the filesystem backend,
+      # pointed at a real S3 server. A backend that passes one and not the
+      # other is the failure this job exists to catch.
+      - name: Conformance against a live S3 server
+        env:
+          KAFKA_WIRE_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+        run: go test ./internal/objstore/ -v -count=1
+
+  clients:
+    name: real client interop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24', cache: true }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: Build the broker
+        run: go build -o kafka-wire ./cmd/kafka-wire
+
+      - name: Start it
+        run: |
+          KAFKA_WIRE_LISTENERS_KAFKA=127.0.0.1:9092 \
+          KAFKA_WIRE_LISTENERS_ADMIN=127.0.0.1:8080 \
+          KAFKA_WIRE_STORAGE_DATADIR=./ci-data \
+          ./kafka-wire serve &
+          for i in $(seq 1 30); do
+            if bash -c "</dev/tcp/127.0.0.1/9092" 2>/dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "broker did not start"; exit 1
+
+      # A Python client is a genuinely different implementation from the Go one
+      # the broker is built with, which is what makes this an interop test
+      # rather than a self-consistency check.
+      - name: kafka-python round trip
+        run: |
+          pip install --quiet kafka-python
+          python examples/python/roundtrip.py
+
+      - name: kcat round trip
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq kcat
+          printf 'one\ntwo\nthree\n' | kcat -b 127.0.0.1:9092 -t ci.kcat -P
+          kcat -b 127.0.0.1:9092 -t ci.kcat -C -o beginning -e -c 3 | tee out.txt
+          grep -q one out.txt && grep -q three out.txt
+
+      - name: Binary payloads survive kcat
+        run: |
+          head -c 65536 /dev/urandom > blob.bin
+          kcat -b 127.0.0.1:9092 -t ci.blob -P < blob.bin
+          kcat -b 127.0.0.1:9092 -t ci.blob -C -o beginning -e -c 1 > blob.out
+          cmp blob.bin blob.out
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24', cache: true }
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout 5m
+
+  docs:
+    name: docs are in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24', cache: true }
+      # docs/configuration.md is generated from the config struct. If someone
+      # adds a setting and forgets to regenerate, the reference silently rots,
+      # so the build says so instead.
+      - name: Configuration reference matches the code
+        run: |
+          go build -o kafka-wire ./cmd/kafka-wire
+          ./kafka-wire config reference > /tmp/generated.txt
+          tail -n +4 /tmp/generated.txt > /tmp/generated-body.txt
+          if ! grep -q "$(head -20 /tmp/generated-body.txt | tail -1)" docs/configuration.md; then
+            echo "docs/configuration.md is out of date."
+            echo "Regenerate it: kafka-wire config reference > docs/configuration.md"
+            exit 1
+          fi

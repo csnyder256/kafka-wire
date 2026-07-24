@@ -1,0 +1,21 @@
+# Cold storage on AWS S3, using the instance role rather than static keys.
+listeners:
+  kafka: "0.0.0.0:9092"
+  admin: "127.0.0.1:8080"
+  advertisedhost: "broker.example.internal"
+storage:
+  datadir: "/var/lib/kafka-wire"
+auth:
+  saslenabled: true
+  usersfile: "/etc/kafka-wire/users.json"
+tls:
+  certfile: "/etc/kafka-wire/tls/server.crt"
+  keyfile: "/etc/kafka-wire/tls/server.key"
+archive:
+  backend: s3
+  prefix: "kafka-wire/"
+  s3:
+    bucket: "my-kafka-wire-archive"
+    region: "us-east-1"
+    # endpoint, accesskey and secretkey are all omitted: the credential chain
+    # picks up the instance role.

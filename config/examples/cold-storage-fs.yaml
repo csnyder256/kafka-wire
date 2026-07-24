@@ -1,0 +1,10 @@
+# Cold storage on a mounted filesystem: a NAS, an NFS export, an SMB share.
+# No object store required, and still a second copy off the broker's disk.
+storage:
+  datadir: "/var/lib/kafka-wire"
+archive:
+  backend: fs
+  age: 1h
+  localretention: 24h
+  fs:
+    path: "/mnt/nas/kafka-wire-archive"

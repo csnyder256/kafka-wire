@@ -1,0 +1,24 @@
+# Cold storage on a store that is not AWS: MinIO, Ceph, SeaweedFS, Garage.
+# The two settings people get wrong are addressing and region.
+listeners:
+  kafka: "0.0.0.0:9092"
+  admin: "127.0.0.1:8080"
+  advertisedhost: "broker.internal"
+storage:
+  datadir: "/data"
+auth:
+  # Private network. On anything public, turn on saslenabled instead.
+  allowanon: true
+archive:
+  backend: s3
+  prefix: "kafka-wire/"
+  age: 1h
+  localretention: 24h
+  s3:
+    bucket: "kafka-wire"
+    endpoint: "http://minio:9000"
+    region: "us-east-1"
+    # MinIO, Ceph and SeaweedFS address buckets by path, not by subdomain.
+    addressing: "path"
+    # Supply credentials with KAFKA_WIRE_ARCHIVE_S3_ACCESSKEY and
+    # KAFKA_WIRE_ARCHIVE_S3_SECRETKEY_FILE rather than writing them here.

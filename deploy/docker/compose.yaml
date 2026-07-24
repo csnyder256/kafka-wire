@@ -1,0 +1,30 @@
+# Plain single-node broker.
+#   docker compose -f deploy/docker/compose.yaml up
+services:
+  kafka-wire:
+    image: ghcr.io/csnyder256/kafka-wire:latest
+    # build: { context: ../.., dockerfile: Dockerfile }   # to build locally
+    ports:
+      - "9092:9092"   # Kafka protocol
+      - "8080:8080"   # admin API and Prometheus metrics
+    environment:
+      # Clients reconnect to whatever the broker advertises. Inside compose,
+      # other services reach it as "kafka-wire"; from your laptop it is
+      # localhost. Pick the one that matches where your client runs.
+      KAFKA_WIRE_LISTENERS_ADVERTISEDHOST: localhost
+      KAFKA_WIRE_LISTENERS_ADVERTISEDPORT: "9092"
+      # This is a private compose network, so running without authentication
+      # is a deliberate choice rather than an oversight.
+      KAFKA_WIRE_AUTH_ALLOWANON: "true"
+    volumes:
+      - kafka-wire-data:/data
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/kafka-wire", "topic", "list", "--brokers", "127.0.0.1:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  kafka-wire-data:

@@ -1,0 +1,8 @@
+# A broker on one machine, no cold storage, no authentication.
+# Suitable for development and for a private network you trust.
+listeners:
+  kafka: "127.0.0.1:9092"
+  admin: "127.0.0.1:8080"
+storage:
+  datadir: "./kafka-wire-data"
+  retentionage: 168h

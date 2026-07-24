@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kafka-wire - a Kafka-compatible message broker in a single Go binary</title>
+<meta name="description" content="Self-hosted Kafka-compatible broker in one Go binary. No ZooKeeper, no KRaft, no JVM, no cluster. Consumer groups, SASL, TLS, ACLs, Prometheus, and cold storage on any S3-compatible object store.">
+<link rel="canonical" href="https://csnyder256.github.io/kafka-wire/">
+<meta name="robots" content="index, follow">
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://csnyder256.github.io/kafka-wire/">
+<meta property="og:title" content="kafka-wire - a Kafka-compatible message broker in a single Go binary">
+<meta property="og:description" content="Self-hosted Kafka-compatible broker in one Go binary. No ZooKeeper, no KRaft, no JVM, no cluster. Cold storage on any S3-compatible object store.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="kafka-wire">
+<meta name="twitter:description" content="A Kafka-compatible message broker in a single Go binary. Self-hosted, no ZooKeeper, no JVM, no cluster.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": "kafka-wire",
+  "description": "A Kafka wire protocol compatible message broker in a single Go binary. Self-hosted, single node, with optional cold storage tiering to any S3-compatible object store.",
+  "codeRepository": "https://github.com/csnyder256/kafka-wire",
+  "programmingLanguage": "Go",
+  "license": "https://opensource.org/licenses/MIT",
+  "author": { "@type": "Person", "name": "Cade", "url": "https://github.com/csnyder256" },
+  "operatingSystem": ["Linux", "macOS", "Windows"],
+  "applicationCategory": "DeveloperApplication",
+  "keywords": "kafka, kafka alternative, kafka compatible broker, message broker, message queue, event streaming, self-hosted kafka, single node kafka, kafka without zookeeper, kafka on s3, tiered storage, golang"
+}
+</script>
+
+<style>
+:root {
+  --bg: #ffffff; --fg: #1a1d21; --muted: #5c6672; --rule: #e3e7ec;
+  --accent: #0b6b5e; --code-bg: #f5f7f9; --card: #fafbfc;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1216; --fg: #dfe4ea; --muted: #98a2ae; --rule: #242a31;
+    --accent: #5fd3bd; --code-bg: #161b21; --card: #141920;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.65 ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 0 24px 96px; }
+header { padding: 72px 0 40px; border-bottom: 1px solid var(--rule); }
+h1 { font-size: 2.6rem; margin: 0 0 12px; letter-spacing: -0.02em; }
+.tag { font-size: 1.18rem; color: var(--muted); margin: 0 0 8px; }
+.sub { color: var(--muted); margin: 0; }
+h2 { font-size: 1.35rem; margin: 44px 0 14px; letter-spacing: -0.01em; }
+h3 { font-size: 1.05rem; margin: 26px 0 8px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+pre {
+  background: var(--code-bg); border: 1px solid var(--rule); border-radius: 8px;
+  padding: 14px 16px; overflow-x: auto; font-size: 13.5px; line-height: 1.55;
+}
+code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+p code, li code, td code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+.btns { display: flex; gap: 10px; flex-wrap: wrap; margin: 26px 0 0; }
+.btn {
+  display: inline-block; padding: 9px 16px; border-radius: 7px;
+  border: 1px solid var(--rule); background: var(--card); font-size: 0.94rem;
+}
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+@media (prefers-color-scheme: dark) { .btn.primary { color: #06120f; } }
+table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.93rem; display: block; overflow-x: auto; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; }
+ul { padding-left: 20px; }
+li { margin: 5px 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 16px 0; }
+.card { border: 1px solid var(--rule); border-radius: 9px; padding: 14px 16px; background: var(--card); }
+.card h3 { margin: 0 0 5px; font-size: 0.98rem; }
+.card p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.note { border-left: 3px solid var(--accent); padding: 2px 0 2px 15px; color: var(--muted); margin: 16px 0; }
+footer { margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.88rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>kafka-wire</h1>
+  <p class="tag">A Kafka-compatible message broker in a single Go binary.</p>
+  <p class="sub">Your disk plus any S3 bucket. No ZooKeeper, no KRaft, no JVM, no cluster to operate.</p>
+  <div class="btns">
+    <a class="btn primary" href="https://github.com/csnyder256/kafka-wire">View on GitHub</a>
+    <a class="btn" href="https://github.com/csnyder256/kafka-wire#sixty-seconds">Quickstart</a>
+    <a class="btn" href="https://github.com/csnyder256/kafka-wire/tree/main/docs">Documentation</a>
+  </div>
+</header>
+
+<h2>Sixty seconds</h2>
+<pre><code>docker run -p 9092:9092 -v kw:/data \
+  -e KAFKA_WIRE_AUTH_ALLOWANON=true \
+  ghcr.io/csnyder256/kafka-wire:latest</code></pre>
+<p>Then point any Kafka client at <code>localhost:9092</code>. Nothing about your code changes.</p>
+
+<h2>What it is</h2>
+<div class="grid">
+  <div class="card">
+    <h3>One binary</h3>
+    <p>The broker, the producer, the consumer, the topic admin and the diagnostic tool are the same executable.</p>
+  </div>
+  <div class="card">
+    <h3>Kafka on the wire</h3>
+    <p>19 protocol APIs, consumer groups, SASL/SCRAM, TLS, ACLs and Prometheus metrics. Real clients, unmodified.</p>
+  </div>
+  <div class="card">
+    <h3>Opaque to your data</h3>
+    <p>JSON, Avro, Protobuf, images, invalid UTF-8. Keys, values and headers are bytes, and the tests assert byte equality.</p>
+  </div>
+  <div class="card">
+    <h3>Cold storage anywhere</h3>
+    <p>A directory, or any S3-compatible store: MinIO, Cloudflare R2, Backblaze B2, Ceph, Wasabi, Garage, GCS.</p>
+  </div>
+</div>
+
+<h2>What it is not</h2>
+<p>Read this part before adopting it.</p>
+<ul>
+  <li><strong>Not replicated.</strong> One node, one copy. If the disk dies, everything not archived dies with it.</li>
+  <li><strong>Not a Kafka feature replica.</strong> No transactions, no exactly-once, no Streams, no Connect runtime, no log compaction.</li>
+  <li><strong>Not a distributed system.</strong> If you need multi-node durability, run Apache Kafka or Redpanda. That is the correct answer, not a hedge.</li>
+</ul>
+<p class="note">If your workload fits on one machine and you would rather own it than operate a cluster, this is built for you. If it does not, it is not.</p>
+
+<h2>Does my Kafka client work?</h2>
+<p>Yes. The one accommodation: the Apache Kafka <strong>Java</strong> client has defaulted
+<code>enable.idempotence=true</code> since 3.0, which requires an API a broker with no
+transaction coordinator does not have. Set <code>enable.idempotence=false</code>.
+librdkafka-based clients already default it off.</p>
+<table>
+  <tr><th>Client</th><th>Works</th></tr>
+  <tr><td>kcat, kafka-python, aiokafka</td><td>yes</td></tr>
+  <tr><td>confluent-kafka (Python, Go, .NET), librdkafka</td><td>yes</td></tr>
+  <tr><td>KafkaJS, franz-go, Sarama, segmentio/kafka-go</td><td>yes</td></tr>
+  <tr><td>Apache Kafka Java client 3.x / 4.x</td><td>yes, with the setting above</td></tr>
+  <tr><td>Kafka Streams, ksqlDB</td><td>no, needs transactions</td></tr>
+</table>
+
+<h2>Where can I run it?</h2>
+<p>Anywhere with a persistent disk and a raw TCP port: Docker, Kubernetes, systemd on a VM,
+Nomad, Fly.io, Railway, Render, Koyeb, Hetzner, EC2, a Raspberry Pi.</p>
+<p>Platforms with an ephemeral filesystem or HTTP-only routing, such as Cloud Run, Heroku and
+Vercel, cannot run it, and the
+<a href="https://github.com/csnyder256/kafka-wire/tree/main/deploy/paas">deployment guide</a>
+says so plainly rather than letting you find out in production.</p>
+
+<h2>Configuration</h2>
+<p>It starts with no configuration at all. When you want some, every setting has one dotted
+path and one mechanically derived environment variable:</p>
+<pre><code>storage.datadir    -&gt;  KAFKA_WIRE_STORAGE_DATADIR
+archive.s3.bucket  -&gt;  KAFKA_WIRE_ARCHIVE_S3_BUCKET</code></pre>
+<pre><code>kafka-wire config print      # what is in effect, and where each value came from
+kafka-wire config validate   # fail before you deploy, not after
+kafka-wire doctor            # ports, disk, advertised address, object store</code></pre>
+
+<h2>Where this came from</h2>
+<p>Built as <strong>ClarusStream</strong>, the message broker for the Clarus contract platform,
+to replace a managed Kafka service that cost more than the rest of the infrastructure combined.
+It has carried that platform's production traffic since May 2026. This repository is a rebuilt,
+vendor-neutral version: the proven protocol and storage core, with every assumption about one
+particular stack removed and replaced with a choice.</p>
+
+<footer>
+  <p>MIT licensed. <a href="https://github.com/csnyder256/kafka-wire">github.com/csnyder256/kafka-wire</a></p>
+  <p>Apache Kafka is a registered trademark of the Apache Software Foundation. kafka-wire is an
+  independent project, is not affiliated with or endorsed by the Apache Software Foundation, and
+  the name is used only to describe the wire protocol this software is compatible with.</p>
+</footer>
+
+</div>
+</body>
+</html>

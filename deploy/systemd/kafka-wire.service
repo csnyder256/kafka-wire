@@ -1,0 +1,51 @@
+# Install:
+#   sudo useradd --system --home /var/lib/kafka-wire --shell /usr/sbin/nologin kafka-wire
+#   sudo mkdir -p /var/lib/kafka-wire /etc/kafka-wire
+#   sudo chown kafka-wire:kafka-wire /var/lib/kafka-wire
+#   sudo cp kafka-wire /usr/local/bin/
+#   sudo cp deploy/systemd/kafka-wire.service /etc/systemd/system/
+#   sudo systemctl enable --now kafka-wire
+[Unit]
+Description=kafka-wire broker
+Documentation=https://github.com/csnyder256/kafka-wire
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kafka-wire
+Group=kafka-wire
+ExecStart=/usr/local/bin/kafka-wire serve --config /etc/kafka-wire/kafka-wire.yaml
+Restart=on-failure
+RestartSec=5s
+
+# Must exceed shutdown.grace, or systemd kills the broker mid-drain.
+TimeoutStopSec=40s
+KillSignal=SIGTERM
+
+# The broker needs one directory and two sockets. Everything else is denied.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+StateDirectory=kafka-wire
+ReadWritePaths=/var/lib/kafka-wire
+
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
