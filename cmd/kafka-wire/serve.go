@@ -91,6 +91,11 @@ FLAGS
 		FsyncInterval: cfg.Storage.FsyncInterval,
 	})
 	if err != nil {
+		// The already-locked case explains itself and names its own fix, so
+		// do not bury it under advice about permissions that does not apply.
+		if strings.Contains(err.Error(), "already using the data directory") {
+			return err
+		}
 		return fmt.Errorf("opening the data directory %s: %w\n"+
 			"  The broker needs a writable directory. Set storage.datadir or --data-dir",
 			cfg.Storage.DataDir, err)

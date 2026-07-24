@@ -93,10 +93,16 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources: { requests: { storage: 20Gi } }
 ---
+# A PodDisruptionBudget on a single-replica StatefulSet is a blunt instrument.
+# maxUnavailable: 1 would permit exactly the eviction it looks like it
+# prevents, so this uses 0: a voluntary disruption (a node drain, a cluster
+# upgrade) has to be forced, which is the correct amount of friction for a
+# broker whose data lives on one node. Delete this object if you would rather
+# drains proceed unattended.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: kafka-wire
 spec:
-  maxUnavailable: 1
+  maxUnavailable: 0
   selector: { matchLabels: { app: kafka-wire } }

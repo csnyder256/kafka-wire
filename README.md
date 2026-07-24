@@ -166,10 +166,10 @@ from the instance credential endpoint. Nothing here assumes an AWS account.
 
 There is a deliberate engineering choice behind this: the S3 driver is built on
 `minio-go`, not the AWS SDK. Since `aws-sdk-go-v2/service/s3` v1.73.0 the AWS SDK
-computes a CRC32 checksum on every upload by default and switches the request to a
-streaming `aws-chunked` trailer, which Hetzner, OVH, Garage, and older MinIO, R2 and
-B2 releases reject outright. Building on the AWS SDK would have made "works with any
-S3 store" quietly untrue.
+computes a checksum on every upload by default and switches the request to a
+streaming `aws-chunked` trailer. Stores catch up at their own pace, and several
+did not implement it for a long time. Rather than track which release of which
+provider is currently compatible, the driver simply never sends the trailer.
 
 ## Do I need ZooKeeper or KRaft?
 

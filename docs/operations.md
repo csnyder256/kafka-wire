@@ -95,6 +95,13 @@ came back.
 **The disk guard tripped.** Free space or expand the volume. Writes resume on
 their own once free space is back above the threshold.
 
+**"another kafka-wire is already using the data directory".** Exactly what it
+says: a second broker tried to open a data directory another process holds.
+Two brokers sharing one directory append to the same segment files and corrupt
+the log, so the second one refuses to start. Stop the other process, or give
+this one its own `storage.datadir`. The lock is an open file handle, so a
+crashed broker never leaves a stale lock behind.
+
 ## Logs
 
 ```yaml

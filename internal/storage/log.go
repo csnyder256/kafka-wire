@@ -68,6 +68,7 @@ const (
 // per-partition logs.
 type Storage struct {
 	cfg   Config
+	lock  *DirLock
 	guard *DiskGuard
 }
 
@@ -108,17 +109,27 @@ func Open(cfg Config) (*Storage, error) {
 	if cfg.FsyncInterval <= 0 {
 		cfg.FsyncInterval = 5 * time.Second
 	}
+	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+		return nil, fmt.Errorf("storage: mkdir data dir: %w", err)
+	}
+	// Take the lock before touching anything, so a second broker fails at
+	// startup rather than after it has already written.
+	lock, err := LockDir(cfg.DataDir)
+	if err != nil {
+		return nil, err
+	}
 	for _, sub := range []string{"topics", "groups", "metadata", "cache"} {
 		if err := os.MkdirAll(filepath.Join(cfg.DataDir, sub), 0o755); err != nil {
+			_ = lock.Release()
 			return nil, fmt.Errorf("storage: mkdir %s: %w", sub, err)
 		}
 	}
-	return &Storage{cfg: cfg}, nil
+	return &Storage{cfg: cfg, lock: lock}, nil
 }
 
-// Close is a no-op today (per-Log Close is what flushes data); kept
+// Close releases the data directory lock. Per-Log Close is what flushes data; kept
 // here for API parity with future S3-cache cleanup.
-func (s *Storage) Close() error { return nil }
+func (s *Storage) Close() error { return s.lock.Release() }
 
 // Cfg exposes the storage config for the broker.
 func (s *Storage) Cfg() Config { return s.cfg }

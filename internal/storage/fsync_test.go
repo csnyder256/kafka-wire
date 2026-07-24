@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -107,4 +108,31 @@ func TestSyncerSweepsWithoutError(t *testing.T) {
 			t.Errorf("FlushAndSync on %s: %v", l.Topic(), err)
 		}
 	}
+}
+
+// A second broker on the same data directory must be refused. Both would
+// append to the same segment files and neither would notice until a consumer
+// read something impossible.
+func TestSecondOpenOnSameDirIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	first, err := Open(Config{DataDir: dir})
+	if err != nil {
+		t.Fatalf("first Open: %v", err)
+	}
+
+	if _, err := Open(Config{DataDir: dir}); err == nil {
+		t.Fatal("a second Open on the same data directory must be refused")
+	} else if !strings.Contains(err.Error(), "already using the data directory") {
+		t.Fatalf("the refusal should say what is wrong and how to fix it, got: %v", err)
+	}
+
+	// And releasing must let the next one in, so a restart is not blocked.
+	if err := first.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	second, err := Open(Config{DataDir: dir})
+	if err != nil {
+		t.Fatalf("Open after the holder released: %v", err)
+	}
+	second.Close()
 }
