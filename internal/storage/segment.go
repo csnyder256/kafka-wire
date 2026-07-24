@@ -106,7 +106,7 @@ func OpenSegment(opts SegmentOpts) (*Segment, error) {
 	}
 
 	if err := s.recover(); err != nil {
-		s.Close()
+		_ = s.Close()
 		return nil, err
 	}
 

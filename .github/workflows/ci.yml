@@ -117,17 +117,17 @@ jobs:
       - name: Binary payloads survive kcat
         run: |
           head -c 65536 /dev/urandom > blob.bin
-          # -D '' disables kcat's line delimiter. Without it kcat splits the
-          # input on every newline byte, which a random blob is full of, and
-          # the comparison fails for a reason that has nothing to do with the
-          # broker.
-          kcat -b 127.0.0.1:9092 -t ci.blob -P -D '' < blob.bin
-          kcat -b 127.0.0.1:9092 -t ci.blob -C -o beginning -e -c 1 -D '' > blob.out
+          # Pass the file as an argument rather than on stdin. Reading stdin,
+          # kcat splits on newline and a random blob is full of them; given a
+          # file it sends the whole thing as one message, which is what makes
+          # this a test of byte fidelity instead of a test of kcat's parser.
+          kcat -b 127.0.0.1:9092 -t ci.blob -P blob.bin
+          kcat -b 127.0.0.1:9092 -t ci.blob -C -o beginning -e -c 1 > blob.out
           cmp blob.bin blob.out
 
       - name: Broker log
         if: always()
-        run: tail -200 broker.log
+        run: tail -200 "$GITHUB_WORKSPACE/broker.log" || true
 
   lint:
     name: lint

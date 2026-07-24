@@ -145,18 +145,6 @@ type connState struct {
 	dispatcher    *Dispatcher
 }
 
-// principalLabel returns a short string for log entries describing
-// which identity made a request. Used in the audit trail.
-func (s *connState) principalLabel() string {
-	if s.saslPrincipal == "" {
-		return "anonymous"
-	}
-	if s.tenantID == "" {
-		return "principal=" + s.saslPrincipal + " tenant=none"
-	}
-	return "principal=" + s.saslPrincipal + " tenant=" + s.tenantID
-}
-
 // handle dispatches one request. Returns a non-nil error only on
 // FATAL conditions (connection should close); per-request business
 // errors are returned to the client inside the response body via
@@ -248,7 +236,7 @@ func (d *Dispatcher) writeUnsupported(state *connState, hdr RequestHeader) error
 // which is enough for the client to fail cleanly rather than hang.
 func setErrorCode(resp kmsg.Response, code int16) {
 	v := reflect.ValueOf(resp)
-	if v.Kind() != reflect.Ptr || v.IsNil() {
+	if v.Kind() != reflect.Pointer || v.IsNil() {
 		return
 	}
 	f := v.Elem().FieldByName("ErrorCode")

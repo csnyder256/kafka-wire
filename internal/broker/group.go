@@ -35,16 +35,15 @@ type GroupCoordinator struct {
 // liveGroup is the runtime layer over a persisted GroupState. Tracks
 // heartbeat timestamps and the in-flight rebalance round.
 type liveGroup struct {
-	id             string
-	state          GroupStatus
-	persisted      *GroupState
-	rebalanceUntil time.Time
-	pending        map[string]*MemberState // members joined this round but not yet sync'd
-	heartbeats     map[string]time.Time    // last heartbeat per member
-	leader         string
-	protocolType   string
-	protocols      []GroupProtocol
-	round          *rebalanceRound
+	id           string
+	state        GroupStatus
+	persisted    *GroupState
+	pending      map[string]*MemberState // members joined this round but not yet sync'd
+	heartbeats   map[string]time.Time    // last heartbeat per member
+	leader       string
+	protocolType string
+	protocols    []GroupProtocol
+	round        *rebalanceRound
 }
 
 // rebalanceRound is one join barrier.

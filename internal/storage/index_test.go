@@ -111,9 +111,3 @@ func TestIndex_PartialFileRecovery(t *testing.T) {
 }
 
 // helper for the truncation test.
-func openForAppend(path string) (interface {
-	Write([]byte) (int, error)
-	Close() error
-}, error) {
-	return nil, nil
-}

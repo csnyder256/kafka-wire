@@ -55,10 +55,7 @@ func (d *Dispatcher) handleMetadata(state *connState, hdr RequestHeader, body []
 		names = requested
 	}
 
-	autoCreate := false
-	if req.AllowAutoTopicCreation && d.brk.AutoCreateTopics() {
-		autoCreate = true
-	}
+	autoCreate := req.AllowAutoTopicCreation && d.brk.AutoCreateTopics()
 
 	for _, name := range names {
 		t := registry.Get(name)

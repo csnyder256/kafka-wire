@@ -201,7 +201,7 @@ func writeResponse(conn net.Conn, correlationID int32, body []byte, flexibleHead
 	// response is a special case: even flexible-versions of
 	// ApiVersions use the v0 response header (no tagged fields). The
 	// caller passes flexibleHeader=false for that.
-	var headerSize int = 4
+	headerSize := 4
 	if flexibleHeader {
 		headerSize = 5
 	}
