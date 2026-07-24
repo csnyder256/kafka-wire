@@ -93,8 +93,10 @@ FLAGS
 	if err != nil {
 		// The already-locked case explains itself and names its own fix, so
 		// do not bury it under advice about permissions that does not apply.
-		if strings.Contains(err.Error(), "already using the data directory") {
-			return err
+		if errors.Is(err, storage.ErrDirLocked) {
+			return fmt.Errorf("%w\n"+
+				"  Two brokers sharing a data directory corrupt the log, so this one will not start.\n"+
+				"  Stop the other process, or give this one its own directory with --data-dir", err)
 		}
 		return fmt.Errorf("opening the data directory %s: %w\n"+
 			"  The broker needs a writable directory. Set storage.datadir or --data-dir",

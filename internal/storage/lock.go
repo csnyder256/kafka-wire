@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,7 +23,12 @@ type DirLock struct {
 	f *os.File
 }
 
-// LockDir takes the lock, or explains who has it.
+// ErrDirLocked reports that another process holds the data directory. The
+// caller turns it into an explanation; keeping the guidance out of the error
+// value itself lets callers match on it with errors.Is.
+var ErrDirLocked = errors.New("another kafka-wire is already using the data directory")
+
+// LockDir takes the lock, or reports that someone else holds it.
 func LockDir(dir string) (*DirLock, error) {
 	path := filepath.Join(dir, ".lock")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
@@ -31,10 +37,7 @@ func LockDir(dir string) (*DirLock, error) {
 	}
 	if err := lockFile(f); err != nil {
 		f.Close()
-		return nil, fmt.Errorf(
-			"another kafka-wire is already using the data directory %s\n"+
-				"  Two brokers sharing a data directory corrupt the log, so this one will not start.\n"+
-				"  Stop the other process, or give this one its own directory with --data-dir.", dir)
+		return nil, fmt.Errorf("%w: %s", ErrDirLocked, dir)
 	}
 	// Record who holds it. This is informational only: the lock itself is the
 	// file handle, so a stale pid here can never wrongly deny a start.
