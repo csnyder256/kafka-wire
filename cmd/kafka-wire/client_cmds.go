@@ -167,7 +167,7 @@ FLAGS
 	defer cl.Close()
 
 	out := bufio.NewWriter(os.Stdout)
-	defer out.Flush()
+	defer func() { _ = out.Flush() }()
 
 	seen := 0
 	for {
@@ -188,7 +188,7 @@ FLAGS
 		}
 		if errs := fetches.Errors(); len(errs) > 0 {
 			if *timeout > 0 && errors.Is(errs[0].Err, context.DeadlineExceeded) {
-				out.Flush()
+				_ = out.Flush()
 				return nil
 			}
 			if errors.Is(errs[0].Err, context.Canceled) {
@@ -207,7 +207,7 @@ FLAGS
 				stop = true
 			}
 		})
-		out.Flush()
+		_ = out.Flush()
 		if stop {
 			return nil
 		}
@@ -220,17 +220,17 @@ FLAGS
 func writeRecord(w io.Writer, r *kgo.Record, format string) {
 	switch format {
 	case "json":
-		fmt.Fprintf(w, `{"topic":%q,"partition":%d,"offset":%d,"timestamp":%q,"key":%q,"value":%q}`+"\n",
+		_, _ = fmt.Fprintf(w, `{"topic":%q,"partition":%d,"offset":%d,"timestamp":%q,"key":%q,"value":%q}`+"\n",
 			r.Topic, r.Partition, r.Offset, r.Timestamp.UTC().Format(time.RFC3339Nano),
 			string(r.Key), previewValue(r.Value))
 	case "hex":
-		fmt.Fprintf(w, "%s\n", hex.EncodeToString(r.Value))
+		_, _ = fmt.Fprintf(w, "%s\n", hex.EncodeToString(r.Value))
 	default:
 		if utf8.Valid(r.Value) {
-			fmt.Fprintf(w, "%s\n", r.Value)
+			_, _ = fmt.Fprintf(w, "%s\n", r.Value)
 			return
 		}
-		fmt.Fprintf(w, "<%d binary bytes: %s...>\n", len(r.Value), hex.EncodeToString(firstN(r.Value, 16)))
+		_, _ = fmt.Fprintf(w, "<%d binary bytes: %s...>\n", len(r.Value), hex.EncodeToString(firstN(r.Value, 16)))
 	}
 }
 

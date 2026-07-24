@@ -53,8 +53,10 @@ kafka-wire consume demo --group workers # join a group and commit offsets
 Point any Kafka client at `localhost:9092`. Nothing about your code changes.
 Working round-trip examples in five languages are in [`examples/`](../examples).
 
-If you use the **Java** client, set `enable.idempotence=false`. That is the only
-accommodation kafka-wire asks for, and the README explains why.
+If your client turns idempotent producing on by default, switch it off. That
+is the Apache Kafka Java client and kafka-python 3.x today:
+`enable.idempotence=false`, or `enable_idempotence=False` in Python. It is the
+only accommodation kafka-wire asks for, and the README explains why.
 
 ## When something does not work
 
@@ -76,8 +78,10 @@ advertised. Behind Docker, NAT, or a load balancer, set
 fault and lists the ways to resolve it. The most common one is binding a
 non-loopback address with authentication off, which is refused on purpose.
 
-**"The Java producer throws UnsupportedVersionException."** Set
-`enable.idempotence=false`.
+**"UnsupportedVersionException", or "broker does not support
+InitProducerIdRequest".** The client defaults idempotent producing on. Set
+`enable.idempotence=false` (Java) or `enable_idempotence=False`
+(kafka-python 3.x).
 
 ## Next
 

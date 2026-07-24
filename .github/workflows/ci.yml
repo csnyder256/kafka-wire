@@ -49,20 +49,23 @@ jobs:
   objstore:
     name: object store conformance (MinIO)
     runs-on: ubuntu-latest
-    services:
-      minio:
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        ports: ['9000:9000']
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: '1.25', cache: true }
+
+      # Started as a step rather than a service container: MinIO needs a
+      # command argument, which the services block cannot express, and the
+      # bitnami mirror that could be used without one is no longer freely
+      # pullable.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin             quay.io/minio/minio:latest server /data
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1; then exit 0; fi
+            sleep 2
+          done
+          echo "MinIO did not become healthy"; docker logs minio; exit 1
       # The same conformance suite that runs against the filesystem backend,
       # pointed at a real S3 server. A backend that passes one and not the
       # other is the failure this job exists to catch.

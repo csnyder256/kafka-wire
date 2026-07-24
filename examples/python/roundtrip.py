@@ -43,10 +43,22 @@ def main() -> int:
     finally:
         admin.close()
 
-    producer = KafkaProducer(bootstrap_servers=BROKERS)
-    for m in MESSAGES:
-        producer.send(TOPIC, value=m, key=b"k")
+    producer = KafkaProducer(
+        bootstrap_servers=BROKERS,
+        # Required on kafka-python 3.x, which turns idempotent producing on by
+        # default. Idempotence needs InitProducerId, and a broker with no
+        # transaction coordinator does not offer it. kafka-python 2.x defaults
+        # this off and does not need the line.
+        enable_idempotence=False,
+    )
+    # Resolve every future. send() is asynchronous and flush() does not raise
+    # on a per-record failure, so a producer that silently dropped everything
+    # would otherwise look like a success right up until the consumer found
+    # an empty topic.
+    futures = [producer.send(TOPIC, value=m, key=b"k") for m in MESSAGES]
     producer.flush()
+    for i, f in enumerate(futures):
+        f.get(timeout=30)  # raises if the broker rejected this record
     producer.close()
     print(f"produced {len(MESSAGES)} records to {TOPIC}", flush=True)
 

@@ -52,7 +52,7 @@ func NewFS(dir string) (*FS, error) {
 	if err := os.WriteFile(probe, []byte("ok"), 0o640); err != nil {
 		return nil, fmt.Errorf("objstore/fs: %s is not writable: %w", abs, err)
 	}
-	os.Remove(probe)
+	_ = os.Remove(probe)
 	return &FS{root: abs}, nil
 }
 
@@ -159,11 +159,11 @@ func (f *FS) UploadPart(_ context.Context, key, uploadID string, number int, r i
 		err = cerr
 	}
 	if err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return Part{}, err
 	}
 	if n != size {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return Part{}, fmt.Errorf("objstore/fs: part %d short write: wrote %d of %d bytes", number, n, size)
 	}
 	final := filepath.Join(dir, fmt.Sprintf("%05d.part", number))
@@ -240,15 +240,15 @@ func (f *FS) CompleteMultipart(_ context.Context, key, uploadID string, parts []
 	for _, p := range sorted {
 		in, err := os.Open(filepath.Join(dir, fmt.Sprintf("%05d.part", p.Number)))
 		if err != nil {
-			out.Close()
-			os.Remove(tmp)
+			_ = out.Close()
+			_ = os.Remove(tmp)
 			return fmt.Errorf("objstore/fs: part %d missing at completion: %w", p.Number, err)
 		}
 		n, err := io.Copy(out, in)
-		in.Close()
+		_ = in.Close()
 		if err != nil {
-			out.Close()
-			os.Remove(tmp)
+			_ = out.Close()
+			_ = os.Remove(tmp)
 			return err
 		}
 		total += n
@@ -256,16 +256,16 @@ func (f *FS) CompleteMultipart(_ context.Context, key, uploadID string, parts []
 	// The object is only durable once its bytes are on the platter; a rename
 	// over a half-flushed file would be a silently corrupt archive.
 	if err := out.Sync(); err != nil {
-		out.Close()
-		os.Remove(tmp)
+		_ = out.Close()
+		_ = os.Remove(tmp)
 		return err
 	}
 	if err := out.Close(); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return err
 	}
 	if err := os.Rename(tmp, dst); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return err
 	}
 	if hdr.Meta == nil {

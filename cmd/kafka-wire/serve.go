@@ -93,7 +93,7 @@ FLAGS
 			"  The broker needs a writable directory. Set storage.datadir or --data-dir",
 			cfg.Storage.DataDir, err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	mreg := metrics.New()
 
@@ -164,7 +164,7 @@ FLAGS
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	dispatcher := wire.NewDispatcher(brk, mreg, wire.Config{
 		MaxRequestBytes: cfg.Limits.MaxRequestBytes,
@@ -198,7 +198,7 @@ FLAGS
 
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), cfg.Shutdown.Grace)
 	defer shutCancel()
-	listener.Close()
+	_ = listener.Close()
 	cancel()
 	if httpSrv != nil {
 		_ = httpSrv.Shutdown(shutCtx)

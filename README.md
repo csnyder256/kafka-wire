@@ -99,15 +99,24 @@ cluster, this is built for you. If it does not, it is not.
 Yes, with one caveat that has a one-line fix.
 
 kafka-wire has no transaction coordinator, so it does not implement
-`InitProducerId`. The Apache Kafka **Java** client has defaulted
-`enable.idempotence=true` since 3.0 and treats the missing API as fatal, so Java
-producers need:
+`InitProducerId`. Any client that turns idempotent producing on by default
+needs it switched off. That currently means the Apache Kafka **Java** client
+(default since 3.0) and **kafka-python 3.x**:
 
 ```properties
-enable.idempotence=false
+enable.idempotence=false     # Java, Spring, Quarkus, Micronaut
 ```
 
-Everything else works unchanged.
+```python
+KafkaProducer(..., enable_idempotence=False)   # kafka-python 3.x
+```
+
+Clients built on librdkafka default it off already, as do kafka-python 2.x,
+KafkaJS, Sarama and franz-go. Everything else works unchanged.
+
+What you give up is producer-side deduplication of retries. It is not emulated,
+because a broker that accepted `InitProducerId` and then ignored sequence
+numbers would be claiming a guarantee it does not provide.
 
 | Client | Works | Note |
 |---|---|---|
@@ -117,7 +126,7 @@ Everything else works unchanged.
 | KafkaJS | yes | |
 | franz-go | yes | verified in CI |
 | Sarama, segmentio/kafka-go | yes | |
-| Apache Kafka Java client 3.x / 4.x | yes | set `enable.idempotence=false` |
+| Apache Kafka Java client 3.x / 4.x | yes | `enable.idempotence=false` |
 | Spring for Apache Kafka, Quarkus, Micronaut | yes | same producer setting |
 | Kafka Connect, Debezium | partial | source connectors work; anything requiring transactions does not |
 | Kafka Streams, ksqlDB | no | needs transactions and internal topic management |
