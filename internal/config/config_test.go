@@ -230,11 +230,11 @@ func TestOpenBindWithoutAuthIsRefused(t *testing.T) {
 
 func TestPartCountCeilingIsCaughtBeforeUpload(t *testing.T) {
 	_, err := Load(Options{LookupEnv: env(map[string]string{
-		"KAFKA_WIRE_ARCHIVE_BACKEND":        "s3",
-		"KAFKA_WIRE_ARCHIVE_S3_BUCKET":      "b",
-		"KAFKA_WIRE_ARCHIVE_S3_PARTSIZE":    "5MiB",
-		"KAFKA_WIRE_STORAGE_SEGMENTBYTES":   "500GiB",
-		"KAFKA_WIRE_AUTH_ALLOWANON":         "true",
+		"KAFKA_WIRE_ARCHIVE_BACKEND":      "s3",
+		"KAFKA_WIRE_ARCHIVE_S3_BUCKET":    "b",
+		"KAFKA_WIRE_ARCHIVE_S3_PARTSIZE":  "5MiB",
+		"KAFKA_WIRE_STORAGE_SEGMENTBYTES": "500GiB",
+		"KAFKA_WIRE_AUTH_ALLOWANON":       "true",
 	})})
 	if err == nil {
 		t.Fatal("a segment/part ratio above 10000 must be refused at startup")

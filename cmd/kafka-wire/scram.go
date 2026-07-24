@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/twmb/franz-go/pkg/sasl/scram"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
 // scramOpt is isolated in its own file so the SASL import does not spread

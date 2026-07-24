@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           cache: true
 
       - name: Build
@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: '1.24', cache: true }
+        with: { go-version: '1.25', cache: true }
       # The broker is one goroutine per connection plus background sweepers, so
       # the race detector is the test that matters most.
       - run: go test -race ./... -timeout 20m
@@ -62,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: '1.24', cache: true }
+        with: { go-version: '1.25', cache: true }
       # The same conformance suite that runs against the filesystem backend,
       # pointed at a real S3 server. A backend that passes one and not the
       # other is the failure this job exists to catch.
@@ -77,7 +77,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: '1.24', cache: true }
+        with: { go-version: '1.25', cache: true }
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
 
@@ -118,17 +118,24 @@ jobs:
           kcat -b 127.0.0.1:9092 -t ci.blob -C -o beginning -e -c 1 > blob.out
           cmp blob.bin blob.out
 
+      - name: Broker log
+        if: always()
+        run: tail -200 broker.log
+
   lint:
     name: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: '1.24', cache: true }
-      - uses: golangci/golangci-lint-action@v6
+        with: { go-version: '1.25', cache: true }
+      # Pinned deliberately. The v6 action installs the golangci-lint v1 line,
+      # which is built with an older Go than this module targets and refuses
+      # to run at all with "the Go language version used to build
+      # golangci-lint is lower than the targeted Go version".
+      - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
-          args: --timeout 5m
+          version: v2.12.2
 
   docs:
     name: docs are in sync
@@ -136,7 +143,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: '1.24', cache: true }
+        with: { go-version: '1.25', cache: true }
       # docs/configuration.md is generated from the config struct. If someone
       # adds a setting and forgets to regenerate, the reference silently rots,
       # so the build says so instead.

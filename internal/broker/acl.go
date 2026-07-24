@@ -72,8 +72,8 @@ type ACLStore struct {
 
 // Principal is one identity allowed to connect.
 type Principal struct {
-	Name          string         `json:"-"` // map key; not duplicated in JSON
-	TenantID      *string        `json:"tenant_id,omitempty"`
+	Name          string           `json:"-"` // map key; not duplicated in JSON
+	TenantID      *string          `json:"tenant_id,omitempty"`
 	TopicPrefixes []TopicPrefixACL `json:"topic_prefixes"`
 	Groups        []GroupPrefixACL `json:"groups"`
 }

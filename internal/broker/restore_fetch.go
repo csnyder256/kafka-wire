@@ -21,7 +21,7 @@ import (
 // MULTI-TENANT INVARIANT: if requesterTenant != "" (the caller is a
 // tenant principal), the resolved manifest entry's TenantID MUST
 // match requesterTenant. A mismatch here would mean a tenant fetched
-// an offset whose archived segment belongs to a different tenant, 
+// an offset whose archived segment belongs to a different tenant,
 // the chaos engine treats this as a P0 isolation breach.
 func (b *Broker) fetchFromArchive(ctx context.Context, topic string, partition int32, fetchOffset int64, maxBytes int, requesterTenant string) ([]byte, int64, error) {
 	if b.restorer == nil || b.manifest == nil || b.cache == nil {

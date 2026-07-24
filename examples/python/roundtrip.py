@@ -2,25 +2,36 @@
 
     pip install kafka-python
     python roundtrip.py
+
+Sends one record of each of several shapes, reads them back, and checks that
+every byte survived. Exits non-zero if anything did not.
 """
 import os
 import sys
+import time
+import uuid
 
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import TopicAlreadyExistsError
 
 BROKERS = os.environ.get("KAFKA_WIRE_BROKERS", "127.0.0.1:9092").split(",")
-TOPIC = "demo.python"
+
+# A fresh topic per run, so running this twice does not read the previous
+# run's records back and report a mismatch that is really just history.
+TOPIC = f"demo.python.{uuid.uuid4().hex[:8]}"
 
 # The broker carries opaque bytes, so anything serializable to bytes works.
-# These deliberately include a value that is not text.
+# These deliberately include shapes that break anything treating a value as
+# text: a leading NUL, every byte value, and an empty payload.
 MESSAGES = [
     b"a plain line",
     '{"id": 1, "note": "json is just bytes here"}'.encode(),
-    bytes(range(256)),          # every byte value, including NUL
-    b"",                        # empty is not the same as absent
+    bytes(range(256)),
+    b"",
 ]
+
+TIMEOUT_S = 60
 
 
 def main() -> int:
@@ -37,23 +48,39 @@ def main() -> int:
         producer.send(TOPIC, value=m, key=b"k")
     producer.flush()
     producer.close()
-    print(f"produced {len(MESSAGES)} records to {TOPIC}")
+    print(f"produced {len(MESSAGES)} records to {TOPIC}", flush=True)
 
+    # Omit group_id to read without joining a consumer group. Set it to a
+    # string to commit offsets and share partitions with other consumers.
     consumer = KafkaConsumer(
         TOPIC,
         bootstrap_servers=BROKERS,
         auto_offset_reset="earliest",
-        consumer_timeout_ms=10_000,
-        # Omit group_id to read without joining a group. Set it to commit
-        # offsets and share partitions with other consumers.
         group_id=None,
     )
-    received = [msg.value for msg in consumer]
+
+    # Poll against an explicit deadline rather than relying on the iterator's
+    # own idle timeout. A consumer that has just subscribed may need a
+    # metadata refresh before it has an assignment, and a single short poll
+    # can legitimately return nothing while that happens.
+    received = []
+    deadline = time.time() + TIMEOUT_S
+    while len(received) < len(MESSAGES) and time.time() < deadline:
+        batches = consumer.poll(timeout_ms=1000, max_records=len(MESSAGES))
+        for records in batches.values():
+            received.extend(r.value for r in records)
     consumer.close()
 
     if received != MESSAGES:
-        print(f"MISMATCH: sent {len(MESSAGES)} records, got {len(received)} back", file=sys.stderr)
+        print(
+            f"MISMATCH: sent {len(MESSAGES)} records, got {len(received)} back",
+            file=sys.stderr,
+        )
+        for i, (sent, got) in enumerate(zip(MESSAGES, received)):
+            if sent != got:
+                print(f"  record {i}: sent {len(sent)} bytes, got {len(got)}", file=sys.stderr)
         return 1
+
     print(f"consumed {len(received)} records, byte-identical to what was sent")
     return 0
 

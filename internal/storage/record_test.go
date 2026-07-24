@@ -10,7 +10,7 @@ import (
 // tail bytes can be anything as long as the CRC matches.
 func makeBatch(t *testing.T, baseOffset int64, recordCount int, attributes int16, ts int64) []byte {
 	t.Helper()
-	recordsTail := []byte{0x01, 0x02, 0x03, 0x04} // opaque per-test
+	recordsTail := []byte{0x01, 0x02, 0x03, 0x04}         // opaque per-test
 	totalBatchLen := v2HeaderSize - 12 + len(recordsTail) // post-BatchLength bytes
 	buf := make([]byte, 12+totalBatchLen)
 	// BaseOffset (8)

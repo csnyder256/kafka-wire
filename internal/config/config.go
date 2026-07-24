@@ -128,9 +128,9 @@ type AuthConfig struct {
 }
 
 type TLSConfig struct {
-	CertFile string `yaml:"certfile" def:"" doc:"PEM certificate for the Kafka listener. Set both certfile and keyfile to enable TLS"`
-	KeyFile  string `yaml:"keyfile" def:"" doc:"PEM private key for the Kafka listener"`
-	ClientCA string `yaml:"clientca" def:"" doc:"PEM bundle of client certificate authorities. Setting it requires and verifies client certificates (mutual TLS)"`
+	CertFile   string `yaml:"certfile" def:"" doc:"PEM certificate for the Kafka listener. Set both certfile and keyfile to enable TLS"`
+	KeyFile    string `yaml:"keyfile" def:"" doc:"PEM private key for the Kafka listener"`
+	ClientCA   string `yaml:"clientca" def:"" doc:"PEM bundle of client certificate authorities. Setting it requires and verifies client certificates (mutual TLS)"`
 	MinVersion string `yaml:"minversion" def:"1.2" doc:"minimum TLS version: 1.2 or 1.3"`
 }
 
@@ -310,9 +310,9 @@ type Field struct {
 }
 
 var secretPaths = map[string]bool{
-	"admin.token":            true,
-	"archive.s3.secretkey":   true,
-	"archive.s3.accesskey":   true,
+	"admin.token":             true,
+	"archive.s3.secretkey":    true,
+	"archive.s3.accesskey":    true,
 	"archive.s3.sessiontoken": true,
 }
 

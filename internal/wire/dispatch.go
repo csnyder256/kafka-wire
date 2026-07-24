@@ -19,16 +19,16 @@ import (
 
 // Config tunes the dispatcher.
 type Config struct {
-	MaxRequestBytes  int32
-	IdleReadTimeout  time.Duration
-	WriteTimeout     time.Duration
-	SaslEnabled      bool
-	UsersFile        string
+	MaxRequestBytes int32
+	IdleReadTimeout time.Duration
+	WriteTimeout    time.Duration
+	SaslEnabled     bool
+	UsersFile       string
 	// MaxConnections caps concurrent client connections. 0 = unlimited.
 	// On a small box, a hostile client could spin up
 	// thousands of TCP connections; capping at e.g. 1024 keeps the
 	// FD count bounded and the kernel's TCP table healthy.
-	MaxConnections   int
+	MaxConnections int
 }
 
 // Dispatcher accepts raw TCP connections, parses Kafka frames, and
@@ -87,10 +87,10 @@ func (d *Dispatcher) Serve(ctx context.Context, conn net.Conn) {
 	}
 
 	state := &connState{
-		conn:          conn,
-		remote:        conn.RemoteAddr().String(),
-		saslComplete:  !d.cfg.SaslEnabled, // pre-authenticated when SASL is off
-		dispatcher:    d,
+		conn:         conn,
+		remote:       conn.RemoteAddr().String(),
+		saslComplete: !d.cfg.SaslEnabled, // pre-authenticated when SASL is off
+		dispatcher:   d,
 	}
 	d.metrics.IncConnections()
 	defer d.metrics.DecConnections()
@@ -139,8 +139,8 @@ type connState struct {
 	lastClientID  string
 	saslComplete  bool
 	saslMechanism string
-	saslPrincipal string  // SASL-authenticated identity name; "" pre-auth
-	tenantID      string  // resolved from the ACL store on auth; "" means unscoped
+	saslPrincipal string      // SASL-authenticated identity name; "" pre-auth
+	tenantID      string      // resolved from the ACL store on auth; "" means unscoped
 	saslState     interface{} // *scramConversation; opaque to dispatch
 	dispatcher    *Dispatcher
 }
@@ -285,7 +285,7 @@ func isClosedConn(err error) bool {
 		"use of closed",
 		"connection reset by peer",
 		"broken pipe",
-		"An established connection was aborted", // Windows, WSAECONNABORTED
+		"An established connection was aborted",      // Windows, WSAECONNABORTED
 		"An existing connection was forcibly closed", // Windows, WSAECONNRESET
 		"forcibly closed by the remote host",
 	} {
@@ -307,25 +307,25 @@ func isTimeout(err error) bool {
 // Kafka error codes we use throughout the wire layer. We define just
 // the ones we hand back; kmsg has the full set if/when needed.
 const (
-	errCodeNone                    int16 = 0
-	errCodeOffsetOutOfRange        int16 = 1
-	errCodeCorruptMessage          int16 = 2
-	errCodeUnknownTopicOrPart      int16 = 3
-	errCodeRequestTimedOut         int16 = 7
-	errCodeMessageTooLarge         int16 = 10
-	errCodeNotLeaderForPartition   int16 = 6
-	errCodeUnknownMember           int16 = 25
-	errCodeMemberIDRequired        int16 = 79
-	errCodeRebalanceInProgress     int16 = 27
-	errCodeIllegalGeneration       int16 = 22
-	errCodeInvalidGroupID          int16 = 24
-	errCodeNotCoordinator          int16 = 16
-	errCodeUnsupportedVersion      int16 = 35
-	errCodeTopicAlreadyExists      int16 = 36
-	errCodeInvalidPartitions       int16 = 37
-	errCodeSaslAuthFailed          int16 = 58
-	errCodeUnsupportedSaslMech     int16 = 33
-	errCodeTopicAuthorizationFailed int16 = 29
-	errCodeGroupAuthorizationFailed int16 = 30
+	errCodeNone                       int16 = 0
+	errCodeOffsetOutOfRange           int16 = 1
+	errCodeCorruptMessage             int16 = 2
+	errCodeUnknownTopicOrPart         int16 = 3
+	errCodeRequestTimedOut            int16 = 7
+	errCodeMessageTooLarge            int16 = 10
+	errCodeNotLeaderForPartition      int16 = 6
+	errCodeUnknownMember              int16 = 25
+	errCodeMemberIDRequired           int16 = 79
+	errCodeRebalanceInProgress        int16 = 27
+	errCodeIllegalGeneration          int16 = 22
+	errCodeInvalidGroupID             int16 = 24
+	errCodeNotCoordinator             int16 = 16
+	errCodeUnsupportedVersion         int16 = 35
+	errCodeTopicAlreadyExists         int16 = 36
+	errCodeInvalidPartitions          int16 = 37
+	errCodeSaslAuthFailed             int16 = 58
+	errCodeUnsupportedSaslMech        int16 = 33
+	errCodeTopicAuthorizationFailed   int16 = 29
+	errCodeGroupAuthorizationFailed   int16 = 30
 	errCodeClusterAuthorizationFailed int16 = 31
 )

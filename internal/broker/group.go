@@ -13,15 +13,15 @@ import (
 // GroupCoordinator implements the Kafka consumer-group state machine
 // for a single broker. State transitions:
 //
-//   Empty            -> PreparingRebalance   (first JoinGroup arrives)
-//   PreparingRebalance -> CompletingRebalance (rebalance timeout fires
-//                                              OR all members joined)
-//   CompletingRebalance -> Stable            (leader's SyncGroup
-//                                              returns assignments)
-//   Stable           -> PreparingRebalance   (member joins/leaves OR
-//                                              session timeout)
-//   * -> Dead                                (LeaveGroup from sole
-//                                              member, GC sweep)
+//	Empty            -> PreparingRebalance   (first JoinGroup arrives)
+//	PreparingRebalance -> CompletingRebalance (rebalance timeout fires
+//	                                           OR all members joined)
+//	CompletingRebalance -> Stable            (leader's SyncGroup
+//	                                           returns assignments)
+//	Stable           -> PreparingRebalance   (member joins/leaves OR
+//	                                           session timeout)
+//	* -> Dead                                (LeaveGroup from sole
+//	                                           member, GC sweep)
 //
 // Transitions are guarded by `mu`. Heartbeat liveness is checked
 // inside the same lock at every JoinGroup / Heartbeat / SyncGroup
@@ -512,10 +512,10 @@ func decodeProtocolNames(m *MemberState) []string {
 
 // SyncGroupArgs is the leader's distribution of partition assignments.
 type SyncGroupArgs struct {
-	GroupID      string
-	Generation   int32
-	MemberID     string
-	Assignments  map[string][]byte // member_id -> assignment bytes (only leader sets)
+	GroupID     string
+	Generation  int32
+	MemberID    string
+	Assignments map[string][]byte // member_id -> assignment bytes (only leader sets)
 }
 
 // SyncGroupResult is what the wire layer returns. The member's own

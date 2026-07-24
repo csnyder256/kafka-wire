@@ -33,9 +33,9 @@ type Registry struct {
 	topicsCreated prometheus.Counter
 
 	// Cold storage tiering.
-	s3Uploaded prometheus.Counter
+	s3Uploaded     prometheus.Counter
 	s3UploadFailed prometheus.Counter
-	s3Restored prometheus.Counter
+	s3Restored     prometheus.Counter
 
 	// Disk guard state. The pause flag previously lived only in logs,
 	// so operators discovered a paused broker from producer errors

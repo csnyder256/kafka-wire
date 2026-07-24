@@ -32,10 +32,10 @@ import (
 // mirroring 40 settings as 40 flags is how a CLI becomes unreadable.
 func bootstrapFlags(fs *flag.FlagSet) map[string]*string {
 	return map[string]*string{
-		"storage.datadir":    fs.String("data-dir", "", "directory for topics, groups, and metadata"),
-		"listeners.kafka":    fs.String("kafka-listen", "", "address for the Kafka protocol listener"),
-		"listeners.admin":    fs.String("admin-listen", "", "address for the HTTP admin and metrics listener"),
-		"log.level":          fs.String("log-level", "", "debug, info, warn, or error"),
+		"storage.datadir": fs.String("data-dir", "", "directory for topics, groups, and metadata"),
+		"listeners.kafka": fs.String("kafka-listen", "", "address for the Kafka protocol listener"),
+		"listeners.admin": fs.String("admin-listen", "", "address for the HTTP admin and metrics listener"),
+		"log.level":       fs.String("log-level", "", "debug, info, warn, or error"),
 	}
 }
 

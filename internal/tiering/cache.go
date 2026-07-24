@@ -21,7 +21,7 @@ import (
 //
 // Each cached segment is stored as:
 //
-//   <cache_dir>/<topic>/<partition>/<base_offset>.log
+//	<cache_dir>/<topic>/<partition>/<base_offset>.log
 //
 // matching the S3 key structure for clarity.
 type Cache struct {

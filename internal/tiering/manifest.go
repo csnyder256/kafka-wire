@@ -67,16 +67,16 @@ type SegmentEntry struct {
 // died before the manifest write (fields are additive; zero values on
 // pre-upgrade checkpoints).
 type PendingUpload struct {
-	Topic      string                  `json:"topic"`
-	Partition  int32                   `json:"partition"`
-	BaseOffset int64                   `json:"base_offset"`
-	NextOffset int64                   `json:"next_offset,omitempty"`
-	TenantID   string                  `json:"tenant_id,omitempty"`
-	SHA256     string                  `json:"sha256,omitempty"`
-	S3Key      string                  `json:"s3_key"`
-	UploadID   string                  `json:"upload_id"`
-	Parts      []PendingUploadPart     `json:"parts"`
-	StartedAt  time.Time               `json:"started_at"`
+	Topic      string              `json:"topic"`
+	Partition  int32               `json:"partition"`
+	BaseOffset int64               `json:"base_offset"`
+	NextOffset int64               `json:"next_offset,omitempty"`
+	TenantID   string              `json:"tenant_id,omitempty"`
+	SHA256     string              `json:"sha256,omitempty"`
+	S3Key      string              `json:"s3_key"`
+	UploadID   string              `json:"upload_id"`
+	Parts      []PendingUploadPart `json:"parts"`
+	StartedAt  time.Time           `json:"started_at"`
 }
 
 type PendingUploadPart struct {
@@ -90,8 +90,8 @@ type PendingUploadPart struct {
 //
 // Two files under /data/metadata/:
 //
-//   archive.json: completed segments (SegmentEntry list)
-//   archive_pending.json: in-flight multipart uploads
+//	archive.json: completed segments (SegmentEntry list)
+//	archive_pending.json: in-flight multipart uploads
 //
 // Both use atomic write-temp-then-rename. The Manifest's mu guards
 // the in-memory slice + map; flushes happen synchronously after every
@@ -123,8 +123,8 @@ func OpenManifest(dataDir string) (*Manifest, error) {
 func (m *Manifest) load() error {
 	if raw, err := os.ReadFile(filepath.Join(m.dir, "archive.json")); err == nil {
 		var wrapper struct {
-			Format    int            `json:"format_version"`
-			Segments  []SegmentEntry `json:"segments"`
+			Format   int            `json:"format_version"`
+			Segments []SegmentEntry `json:"segments"`
 		}
 		if err := json.Unmarshal(raw, &wrapper); err != nil {
 			// A corrupt manifest must not brick the broker: this error
@@ -332,8 +332,8 @@ func atomicWrite(path string, data interface{}) error {
 // SegmentKey returns the canonical S3 object key for an archived
 // segment. Format depends on tenancy:
 //
-//   tenant-scoped:  <prefix>/tenants/<tenant_id>/<topic>/<partition>/<base_offset>.log
-//   shared:         <prefix>/<topic>/<partition>/<base_offset>.log
+//	tenant-scoped:  <prefix>/tenants/<tenant_id>/<topic>/<partition>/<base_offset>.log
+//	shared:         <prefix>/<topic>/<partition>/<base_offset>.log
 //
 // The tenant prefix gives operators a visual + IAM-policy boundary:
 // a tenant-bucket-policy can pin write/read to its own subtree, and

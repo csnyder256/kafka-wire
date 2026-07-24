@@ -314,7 +314,7 @@ func (d *Dispatcher) handleSASLAuthenticate(state *connState, hdr RequestHeader,
 			// connState so every Produce/Fetch handler has O(1)
 			// access without re-walking the ACL map. If the ACL store
 			// has no entry for this principal AND ACLs are configured,
-			// the connection authenticates but has zero permissions, 
+			// the connection authenticates but has zero permissions,
 			// every authorize call returns false, every Produce/Fetch
 			// fails closed.
 			if acl := d.brk.ACL(); acl != nil {

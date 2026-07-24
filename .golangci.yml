@@ -1,0 +1,28 @@
+# golangci-lint v2 configuration.
+version: "2"
+
+linters:
+  default: standard
+  settings:
+    staticcheck:
+      checks:
+        - all
+        # ST1000 wants a package comment in a house style that does not match
+        # the one used here. Every package in this repo has a doc comment; it
+        # just does not always begin with the package name.
+        - -ST1000
+  exclusions:
+    generated: lax
+    rules:
+      # Tests deliberately ignore errors on cleanup paths and on calls whose
+      # failure is the thing being asserted somewhere else.
+      - path: (_test\.go|/e2e/)
+        linters: [errcheck]
+      # The examples are written to be read and pasted, not to model
+      # exhaustive error handling.
+      - path: examples/
+        linters: [errcheck, staticcheck]
+
+formatters:
+  enable:
+    - gofmt

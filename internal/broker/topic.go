@@ -200,7 +200,7 @@ func (r *TopicRegistry) Delete(name string) error {
 
 // Sentinel errors used by the wire layer.
 var (
-	ErrTopicExists  = errors.New("topic already exists")
-	ErrUnknownTopic = errors.New("unknown topic")
+	ErrTopicExists      = errors.New("topic already exists")
+	ErrUnknownTopic     = errors.New("unknown topic")
 	ErrUnknownPartition = errors.New("unknown partition")
 )

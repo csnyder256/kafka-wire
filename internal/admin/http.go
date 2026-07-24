@@ -126,10 +126,10 @@ func (h *handlers) resetOffset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		GroupID    string `json:"group_id"`
-		Topic      string `json:"topic"`     // optional; empty = all subscribed topics
-		Strategy   string `json:"strategy"`  // earliest | latest | timestamp
-		TimestampMS int64 `json:"timestamp_ms,omitempty"`
+		GroupID     string `json:"group_id"`
+		Topic       string `json:"topic"`    // optional; empty = all subscribed topics
+		Strategy    string `json:"strategy"` // earliest | latest | timestamp
+		TimestampMS int64  `json:"timestamp_ms,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -203,10 +203,10 @@ func (h *handlers) archive(w http.ResponseWriter, r *http.Request) {
 	}
 	all := mfst.All()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"enabled":   true,
-		"segments":  all,
-		"pending":   mfst.PendingAll(),
-		"total":     len(all),
+		"enabled":  true,
+		"segments": all,
+		"pending":  mfst.PendingAll(),
+		"total":    len(all),
 	})
 }
 
@@ -254,10 +254,10 @@ func (h *handlers) health(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) cluster(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"broker_id":         h.brk.BrokerID(),
-		"cluster_id":        h.brk.ClusterID(),
-		"advertised_host":   h.brk.AdvertisedHost(),
-		"advertised_port":   h.brk.AdvertisedPort(),
+		"broker_id":          h.brk.BrokerID(),
+		"cluster_id":         h.brk.ClusterID(),
+		"advertised_host":    h.brk.AdvertisedHost(),
+		"advertised_port":    h.brk.AdvertisedPort(),
 		"auto_create_topics": h.brk.AutoCreateTopics(),
 	})
 }
@@ -396,18 +396,18 @@ func partitionDetails(t *broker.Topic) []map[string]any {
 		segOut := make([]map[string]any, 0, len(segs))
 		for _, seg := range segs {
 			segOut = append(segOut, map[string]any{
-				"base_offset":    seg.BaseOffset(),
-				"next_offset":    seg.NextOffset(),
-				"size_bytes":     seg.Size(),
-				"sealed":         seg.Sealed(),
-				"created_at":     seg.CreatedAt(),
+				"base_offset": seg.BaseOffset(),
+				"next_offset": seg.NextOffset(),
+				"size_bytes":  seg.Size(),
+				"sealed":      seg.Sealed(),
+				"created_at":  seg.CreatedAt(),
 			})
 		}
 		out = append(out, map[string]any{
-			"partition":         l.Partition(),
-			"high_watermark":    l.HighWatermark(),
-			"log_start_offset":  l.LogStartOffset(),
-			"segments":          segOut,
+			"partition":        l.Partition(),
+			"high_watermark":   l.HighWatermark(),
+			"log_start_offset": l.LogStartOffset(),
+			"segments":         segOut,
 		})
 	}
 	return out

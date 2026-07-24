@@ -86,13 +86,13 @@ func (d *Dispatcher) handleMetadata(state *connState, hdr RequestHeader, body []
 		}
 		for _, l := range t.Logs() {
 			p := kmsg.MetadataResponseTopicPartition{
-				Partition:        l.Partition(),
-				Leader:           d.brk.BrokerID(),
-				LeaderEpoch:      0,
-				Replicas:         []int32{d.brk.BrokerID()},
-				ISR:              []int32{d.brk.BrokerID()},
-				OfflineReplicas:  nil,
-				ErrorCode:        errCodeNone,
+				Partition:       l.Partition(),
+				Leader:          d.brk.BrokerID(),
+				LeaderEpoch:     0,
+				Replicas:        []int32{d.brk.BrokerID()},
+				ISR:             []int32{d.brk.BrokerID()},
+				OfflineReplicas: nil,
+				ErrorCode:       errCodeNone,
 			}
 			mt.Partitions = append(mt.Partitions, p)
 		}

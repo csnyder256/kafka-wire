@@ -6,19 +6,19 @@
 //
 // Config lives at /data/metadata/webhooks.json:
 //
-//   {
-//     "format_version": 1,
-//     "subscriptions": [
-//       {
-//         "topic": "orders.events",
-//         "url": "https://hooks.slack.com/services/...",
-//         "method": "POST",
-//         "headers": { "X-Custom": "value" },
-//         "filter_event_type": "document.uploaded",
-//         "auto_offset_reset": "latest"
-//       }
-//     ]
-//   }
+//	{
+//	  "format_version": 1,
+//	  "subscriptions": [
+//	    {
+//	      "topic": "orders.events",
+//	      "url": "https://hooks.slack.com/services/...",
+//	      "method": "POST",
+//	      "headers": { "X-Custom": "value" },
+//	      "filter_event_type": "document.uploaded",
+//	      "auto_offset_reset": "latest"
+//	    }
+//	  ]
+//	}
 //
 // Each subscription runs as a goroutine reading from the broker via
 // the same Kafka wire protocol its clients use. Failures

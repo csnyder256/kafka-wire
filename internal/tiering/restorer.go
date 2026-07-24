@@ -18,10 +18,10 @@ import (
 //
 // CRITICAL invariants enforced before any byte hits the cache:
 //
-//   1. SHA-256 of downloaded bytes matches manifest.SHA256.
-//   2. HMAC signature matches our HMACKey (if configured).
-//   3. (caller) The requesting tenant matches manifest.TenantID
-//      before serving from cache.
+//  1. SHA-256 of downloaded bytes matches manifest.SHA256.
+//  2. HMAC signature matches our HMACKey (if configured).
+//  3. (caller) The requesting tenant matches manifest.TenantID
+//     before serving from cache.
 //
 // Any failure aborts the restore + drops the bytes (never written to
 // cache); the chaos engine treats it as a tenant-isolation event.
@@ -62,7 +62,7 @@ func NewRestorerWithKey(bucket string, cache *Cache, manifest *Manifest, store o
 }
 
 // EntryFor returns the manifest entry for (topic, partition, baseOffset)
-//: exposed so callers can verify tenant ownership BEFORE serving
+// : exposed so callers can verify tenant ownership BEFORE serving
 // bytes from cache.
 func (r *Restorer) EntryFor(topic string, partition int32, baseOffset int64) (SegmentEntry, bool) {
 	return r.manifest.Lookup(topic, partition, baseOffset)

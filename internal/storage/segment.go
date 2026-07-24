@@ -235,10 +235,11 @@ func (s *Segment) ShouldRoll() bool {
 // already rewritten BaseOffset to be absolute; we trust the bytes.
 //
 // Returns:
-//   firstOffset:  offset of first record in this batch
-//   lastOffset:   offset of last record in this batch
-//   position:     byte position of this batch in the log file
-//   err:          any error (write, parse, CRC)
+//
+//	firstOffset:  offset of first record in this batch
+//	lastOffset:   offset of last record in this batch
+//	position:     byte position of this batch in the log file
+//	err:          any error (write, parse, CRC)
 func (s *Segment) Append(batch []byte) (firstOffset, lastOffset, position int64, err error) {
 	if s.sealed {
 		return 0, 0, 0, errors.New("segment sealed")

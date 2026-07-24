@@ -22,7 +22,7 @@ import (
 //   2. Per-record timestamp inspection (we use batch.MaxTimestamp
 //      from the UNcompressed header, so this is moot in practice).
 //
-// What we DO need to validate is the codec ID at Produce time, 
+// What we DO need to validate is the codec ID at Produce time,
 // otherwise a producer can claim a non-existent codec (e.g. ID 7)
 // and consumers would see corrupt data with a misleading error.
 

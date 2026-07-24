@@ -13,9 +13,10 @@ import (
 // and by the dashboard for time-travel queries.
 //
 // Special timestamp values:
-//   -2 = LIST_EARLIEST
-//   -1 = LIST_LATEST
-//   >=0 = "smallest offset whose batch.MaxTimestamp >= ts"
+//
+//	-2 = LIST_EARLIEST
+//	-1 = LIST_LATEST
+//	>=0 = "smallest offset whose batch.MaxTimestamp >= ts"
 func (d *Dispatcher) handleListOffsets(state *connState, hdr RequestHeader, body []byte) error {
 	req := kmsg.NewPtrListOffsetsRequest()
 	req.SetVersion(hdr.APIVersion)

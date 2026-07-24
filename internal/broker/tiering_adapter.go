@@ -3,8 +3,8 @@ package broker
 import (
 	"time"
 
-	"github.com/csnyder256/kafka-wire/internal/tiering"
 	"github.com/csnyder256/kafka-wire/internal/storage"
+	"github.com/csnyder256/kafka-wire/internal/tiering"
 )
 
 // segmentSource is the bridge between *storage.Segment + its owning
@@ -17,13 +17,13 @@ type segmentSource struct {
 	seg       *storage.Segment
 }
 
-func (s segmentSource) Topic() string         { return s.topic }
-func (s segmentSource) Partition() int32      { return s.partition }
-func (s segmentSource) BaseOffset() int64     { return s.seg.BaseOffset() }
-func (s segmentSource) NextOffset() int64     { return s.seg.NextOffset() }
-func (s segmentSource) Size() int64           { return s.seg.Size() }
-func (s segmentSource) LogPath() string       { return s.seg.LogPath() }
-func (s segmentSource) CreatedAt() time.Time  { return s.seg.CreatedAt() }
+func (s segmentSource) Topic() string        { return s.topic }
+func (s segmentSource) Partition() int32     { return s.partition }
+func (s segmentSource) BaseOffset() int64    { return s.seg.BaseOffset() }
+func (s segmentSource) NextOffset() int64    { return s.seg.NextOffset() }
+func (s segmentSource) Size() int64          { return s.seg.Size() }
+func (s segmentSource) LogPath() string      { return s.seg.LogPath() }
+func (s segmentSource) CreatedAt() time.Time { return s.seg.CreatedAt() }
 
 // AllSealedSegments returns one SegmentSource per sealed segment
 // across every topic+partition. Implements tiering.LogProvider.

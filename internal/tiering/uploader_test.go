@@ -197,13 +197,13 @@ type fakeSegment struct {
 	created   time.Time
 }
 
-func (f fakeSegment) Topic() string         { return f.topic }
-func (f fakeSegment) Partition() int32      { return f.partition }
-func (f fakeSegment) BaseOffset() int64     { return f.base }
-func (f fakeSegment) NextOffset() int64     { return f.next }
-func (f fakeSegment) Size() int64           { return f.size }
-func (f fakeSegment) LogPath() string       { return f.path }
-func (f fakeSegment) CreatedAt() time.Time  { return f.created }
+func (f fakeSegment) Topic() string        { return f.topic }
+func (f fakeSegment) Partition() int32     { return f.partition }
+func (f fakeSegment) BaseOffset() int64    { return f.base }
+func (f fakeSegment) NextOffset() int64    { return f.next }
+func (f fakeSegment) Size() int64          { return f.size }
+func (f fakeSegment) LogPath() string      { return f.path }
+func (f fakeSegment) CreatedAt() time.Time { return f.created }
 
 func writeSegment(t *testing.T, dir string, n int) (fakeSegment, []byte) {
 	t.Helper()

@@ -12,8 +12,8 @@ import (
 	"sync"
 
 	"github.com/csnyder256/kafka-wire/internal/metrics"
-	"github.com/csnyder256/kafka-wire/internal/tiering"
 	"github.com/csnyder256/kafka-wire/internal/storage"
+	"github.com/csnyder256/kafka-wire/internal/tiering"
 )
 
 // Config holds the runtime configuration the wire layer needs to
@@ -32,9 +32,9 @@ type Config struct {
 	// AutoCreateTopics gates whether a Produce or Metadata request for
 	// an unknown topic implicitly creates it. Defaults to true for
 	// drop-in compat with existing services.
-	AutoCreateTopics    bool
-	DefaultPartitions   int32
-	DefaultRepFactor    int16
+	AutoCreateTopics  bool
+	DefaultPartitions int32
+	DefaultRepFactor  int16
 }
 
 // Broker is the singleton that owns all per-cluster state.
@@ -101,10 +101,10 @@ func New(cfg Config) *Broker {
 	}
 	cfg.AutoCreateTopics = true // sticky default; explicit-false support comes in admin API
 	b := &Broker{
-		cfg:      cfg,
-		store:    cfg.Storage,
-		metrics:  cfg.Metrics,
-		topics:   NewTopicRegistry(cfg.Storage),
+		cfg:     cfg,
+		store:   cfg.Storage,
+		metrics: cfg.Metrics,
+		topics:  NewTopicRegistry(cfg.Storage),
 	}
 	return b
 }
@@ -199,7 +199,7 @@ func (b *Broker) LoadState() error {
 
 	// OffsetStore + GroupCoordinator come up only after topics so
 	// JoinGroup can validate subscriptions. (this build does not
-	// validate subscriptions yet: it passes them through opaquely, 
+	// validate subscriptions yet: it passes them through opaquely,
 	// but the order is correct for forward compat.)
 	os, err := NewOffsetStore(b.cfg.DataDir)
 	if err != nil {
@@ -431,7 +431,7 @@ func (b *Broker) verifyTopicTenant(t *Topic, principalTenant string) error {
 	}
 	tenantOwner := t.Config().OwnerTenantID
 	if tenantOwner == "" {
-		// Tenant principal trying to access a shared/legacy topic, 
+		// Tenant principal trying to access a shared/legacy topic,
 		// fail closed. If chaos test creates a new tenant, it must
 		// also create tenant-scoped topics for that tenant.
 		return ErrUnauthorizedTopic
@@ -509,7 +509,7 @@ func (b *Broker) fetchInternal(topic string, partition int32, fetchOffset int64,
 //   - timestamp == -2 (Earliest): logStartOffset
 //   - timestamp == -1 (Latest):   highWatermark
 //   - timestamp >= 0:             smallest offset whose batch
-//                                  MaxTimestamp >= timestamp
+//     MaxTimestamp >= timestamp
 func (b *Broker) ListOffsets(topic string, partition int32, timestamp int64) (int64, int64, error) {
 	t := b.topics.Get(topic)
 	if t == nil {

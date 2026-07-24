@@ -17,15 +17,15 @@ import (
 // CreateTopics.
 
 type clusterMetadata struct {
-	ClusterID     string `json:"cluster_id"`
-	BrokerID      int32  `json:"broker_id"`
-	Advertised    string `json:"advertised_listener"`
-	Format        int    `json:"format_version"`
+	ClusterID  string `json:"cluster_id"`
+	BrokerID   int32  `json:"broker_id"`
+	Advertised string `json:"advertised_listener"`
+	Format     int    `json:"format_version"`
 }
 
 type topicsMetadata struct {
-	Format int                       `json:"format_version"`
-	Topics map[string]TopicConfig    `json:"topics"`
+	Format int                    `json:"format_version"`
+	Topics map[string]TopicConfig `json:"topics"`
 }
 
 const metadataFormat = 1

@@ -8,7 +8,7 @@
 <p align="center">
   <a href="https://github.com/csnyder256/kafka-wire/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/csnyder256/kafka-wire/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="MIT licensed" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
-  <a href="https://go.dev/"><img alt="Go 1.24+" src="https://img.shields.io/badge/go-1.24%2B-00ADD8.svg"></a>
+  <a href="https://go.dev/"><img alt="Go 1.25+" src="https://img.shields.io/badge/go-1.25%2B-00ADD8.svg"></a>
   <a href="https://github.com/csnyder256/kafka-wire/pkgs/container/kafka-wire"><img alt="container image" src="https://img.shields.io/badge/ghcr.io-kafka--wire-2496ED.svg"></a>
 </p>
 

@@ -17,38 +17,38 @@ import (
 //
 // Format on disk:
 //
-//   {
-//     "group_id": "a worker",
-//     "generation": 7,
-//     "members": { ... },             // see group.go
-//     "offsets": {
-//       "orders.events": {
-//         "0": {
-//           "offset": 12345,
-//           "leader_epoch": 0,
-//           "metadata": "",
-//           "commit_timestamp": 1714234567000
-//         }
-//       }
-//     }
-//   }
+//	{
+//	  "group_id": "a worker",
+//	  "generation": 7,
+//	  "members": { ... },             // see group.go
+//	  "offsets": {
+//	    "orders.events": {
+//	      "0": {
+//	        "offset": 12345,
+//	        "leader_epoch": 0,
+//	        "metadata": "",
+//	        "commit_timestamp": 1714234567000
+//	      }
+//	    }
+//	  }
+//	}
 type OffsetStore struct {
-	dir string
-	mu  sync.Mutex
+	dir    string
+	mu     sync.Mutex
 	groups map[string]*GroupState
 }
 
 // GroupState is the persisted shape per group. Members + offsets
 // share a file so a single atomic rename captures both.
 type GroupState struct {
-	GroupID    string                                       `json:"group_id"`
-	Generation int32                                        `json:"generation"`
-	ProtocolType string                                     `json:"protocol_type"`
-	Protocol   string                                       `json:"protocol"`
-	Members    map[string]*MemberState                      `json:"members"`
-	Offsets    map[string]map[int32]CommittedOffset         `json:"offsets"`
-	Leader     string                                       `json:"leader"`
-	UpdatedAt  int64                                        `json:"updated_at_ms"`
+	GroupID      string                               `json:"group_id"`
+	Generation   int32                                `json:"generation"`
+	ProtocolType string                               `json:"protocol_type"`
+	Protocol     string                               `json:"protocol"`
+	Members      map[string]*MemberState              `json:"members"`
+	Offsets      map[string]map[int32]CommittedOffset `json:"offsets"`
+	Leader       string                               `json:"leader"`
+	UpdatedAt    int64                                `json:"updated_at_ms"`
 }
 
 // CommittedOffset is one committed (group, topic, partition) tuple.
@@ -64,13 +64,13 @@ type CommittedOffset struct {
 // rebalance-time snapshot we persist so a restart can resume the
 // previous rebalance without losing offsets.
 type MemberState struct {
-	MemberID         string `json:"member_id"`
-	ClientID         string `json:"client_id"`
-	ClientHost       string `json:"client_host"`
-	SessionTimeoutMS int32  `json:"session_timeout_ms"`
-	RebalanceTimeoutMS int32 `json:"rebalance_timeout_ms"`
-	Subscription     []byte `json:"subscription"`     // metadata bytes from JoinGroup
-	Assignment       []byte `json:"assignment"`       // assignment bytes from SyncGroup
+	MemberID           string `json:"member_id"`
+	ClientID           string `json:"client_id"`
+	ClientHost         string `json:"client_host"`
+	SessionTimeoutMS   int32  `json:"session_timeout_ms"`
+	RebalanceTimeoutMS int32  `json:"rebalance_timeout_ms"`
+	Subscription       []byte `json:"subscription"` // metadata bytes from JoinGroup
+	Assignment         []byte `json:"assignment"`   // assignment bytes from SyncGroup
 	// Protocols is the assignment-protocol list this member advertised, in
 	// its own preference order. The coordinator needs it to pick a protocol
 	// every member of the group can actually decode.

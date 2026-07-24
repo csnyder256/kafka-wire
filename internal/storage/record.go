@@ -32,7 +32,7 @@ import (
 const (
 	v2HeaderSize    = 61
 	v2MagicByte     = 2
-	v2BatchLenStart = 8  // bytes into the on-disk record where batch_length is
+	v2BatchLenStart = 8 // bytes into the on-disk record where batch_length is
 	v2BatchLenSize  = 4
 	v2MagicOffset   = 16 // BaseOffset(8) + BatchLength(4) + PartitionLeaderEpoch(4)
 	v2CRCOffset     = 17
@@ -52,18 +52,18 @@ const MaxBatchSize = 4 * 1024 * 1024
 
 // BatchHeader is the parsed header fields we care about.
 type BatchHeader struct {
-	BaseOffset       int64
-	BatchLength      int32 // bytes after BatchLength itself
-	Magic            int8
-	CRC              uint32
-	Attributes       int16
-	LastOffsetDelta  int32
-	FirstTimestamp   int64
-	MaxTimestamp     int64
-	ProducerID       int64
-	ProducerEpoch    int16
-	BaseSequence     int32
-	RecordCount      int32
+	BaseOffset      int64
+	BatchLength     int32 // bytes after BatchLength itself
+	Magic           int8
+	CRC             uint32
+	Attributes      int16
+	LastOffsetDelta int32
+	FirstTimestamp  int64
+	MaxTimestamp    int64
+	ProducerID      int64
+	ProducerEpoch   int16
+	BaseSequence    int32
+	RecordCount     int32
 }
 
 // LastOffset is the highest offset contained in this batch.
