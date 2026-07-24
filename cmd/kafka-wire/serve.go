@@ -87,6 +87,8 @@ FLAGS
 		SegmentBytes:  cfg.Storage.SegmentBytes,
 		SegmentMS:     cfg.Storage.SegmentAge.Milliseconds(),
 		IndexInterval: cfg.Storage.IndexInterval,
+		FsyncMode:     cfg.Storage.FsyncMode,
+		FsyncInterval: cfg.Storage.FsyncInterval,
 	})
 	if err != nil {
 		return fmt.Errorf("opening the data directory %s: %w\n"+
@@ -121,6 +123,12 @@ FLAGS
 	})
 	if err := brk.LoadState(); err != nil {
 		return fmt.Errorf("recovering broker state from %s: %w", cfg.Storage.DataDir, err)
+	}
+
+	// "interval" is the default durability mode, so this timer is what makes
+	// the default mean anything.
+	if cfg.Storage.FsyncMode == storage.FsyncInterval {
+		go storage.RunSyncer(brk.Topics(), cfg.Storage.FsyncInterval)
 	}
 
 	go storage.RunRetention(brk.Topics(), storage.RetentionConfig{

@@ -41,7 +41,27 @@ type Config struct {
 	SegmentBytes  int64
 	SegmentMS     int64
 	IndexInterval int64
+
+	// FsyncMode decides when data is forced to the platter.
+	//
+	//	none      never fsync explicitly; the operating system decides.
+	//	interval  fsync on a timer (see RunSyncer). The default.
+	//	always    fsync before Append returns, so an acknowledged write has
+	//	          survived a machine crash.
+	//
+	// This is the whole durability story on a single node: there is no
+	// replica to fall back on, so the only lever is how long a write can sit
+	// in the page cache.
+	FsyncMode     string
+	FsyncInterval time.Duration
 }
+
+// Durability modes.
+const (
+	FsyncNone     = "none"
+	FsyncInterval = "interval"
+	FsyncAlways   = "always"
+)
 
 // Storage is the top-level wrapper main.go uses to bring everything
 // up. Holds the data directory and provides factory methods for
@@ -81,6 +101,12 @@ func Open(cfg Config) (*Storage, error) {
 	}
 	if cfg.IndexInterval <= 0 {
 		cfg.IndexInterval = 16 * 1024
+	}
+	if cfg.FsyncMode == "" {
+		cfg.FsyncMode = FsyncInterval
+	}
+	if cfg.FsyncInterval <= 0 {
+		cfg.FsyncInterval = 5 * time.Second
 	}
 	for _, sub := range []string{"topics", "groups", "metadata", "cache"} {
 		if err := os.MkdirAll(filepath.Join(cfg.DataDir, sub), 0o755); err != nil {
@@ -274,6 +300,15 @@ func (l *Log) Append(batches [][]byte) (firstOffset int64, err error) {
 				return 0, fmt.Errorf("roll mid-produce: %w", rerr)
 			}
 			active = newActive
+		}
+	}
+
+	// In "always" mode the write is not acknowledged until it is on the
+	// platter. This is the only mode under which a machine losing power
+	// cannot cost an acknowledged record, and it is why the mode exists.
+	if l.cfg.FsyncMode == FsyncAlways {
+		if serr := l.segments[len(l.segments)-1].Sync(); serr != nil {
+			return 0, fmt.Errorf("fsync after append: %w", serr)
 		}
 	}
 
