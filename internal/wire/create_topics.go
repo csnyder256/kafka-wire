@@ -78,10 +78,7 @@ func (d *Dispatcher) handleDeleteTopics(state *connState, hdr RequestHeader, bod
 	// v6+ uses TopicNames + Topics (with topic UUIDs); earlier versions
 	// used Topics ([]string). Handle both: if Topics is populated,
 	// dereference each name; if TopicNames is populated, use that.
-	var names []string
-	for _, n := range req.TopicNames {
-		names = append(names, n)
-	}
+	names := append([]string(nil), req.TopicNames...)
 	for _, t := range req.Topics {
 		if t.Topic != nil {
 			names = append(names, *t.Topic)

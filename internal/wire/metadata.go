@@ -35,7 +35,7 @@ func (d *Dispatcher) handleMetadata(state *connState, hdr RequestHeader, body []
 	//   - req.Topics has explicit names: return only those
 	//   - if AllowAutoTopicCreation=true and topic missing, create it
 	var requested []string
-	includeAll := req.Topics == nil || len(req.Topics) == 0
+	includeAll := len(req.Topics) == 0
 	if !includeAll {
 		for _, t := range req.Topics {
 			if t.Topic != nil {
