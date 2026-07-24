@@ -13,7 +13,10 @@ non-zero.
 
 ```sh
 pip install -r chaos/requirements.txt
-./chaos/run.sh 120 4          # 120 seconds, 4 principals
+bash chaos/run.sh 120 4       # 120 seconds, 4 principals
+
+# If the interpreter on PATH is not the one holding those dependencies:
+PYTHON="py -3" bash chaos/run.sh 120 4
 ```
 
 That script does the whole dance, because SCRAM credentials have to exist on

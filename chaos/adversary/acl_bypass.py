@@ -121,7 +121,7 @@ async def acl_bypass_topic_names(topo: Topology, bootstrap: str, *, rng: random.
     return {"attempts": attempts, "denied": denied, "violations": 0}
 
 
-async def acl_unauthenticated_probe(topo: Topology, bootstrap: str) -> dict[str, Any]:
+async def acl_unauthenticated_probe(topo: Topology, bootstrap: str, **_kw) -> dict[str, Any]:
     """Skip SASL entirely. The broker should refuse any non-handshake
     request before authentication completes."""
     from aiokafka import AIOKafkaProducer

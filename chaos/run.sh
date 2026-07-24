@@ -11,6 +11,13 @@ DURATION="${1:-120}"
 PRINCIPALS="${2:-4}"
 SEED="${CHAOS_SEED:-$RANDOM}"
 WORK="$(mktemp -d)"
+# The brute-force module needs a token to fail against. Without one the admin
+# API is open on loopback by design, and the harness correctly calls that a
+# bypass.
+ADMIN_TOKEN="chaos-$(od -An -N16 -tx1 /dev/urandom | tr -dc 'a-f0-9')"
+# Override when the interpreter on PATH is not the one with the harness
+# dependencies installed, for example PYTHON="py -3" under Git Bash.
+PYTHON="${PYTHON:-python3}"
 KAFKA_PORT=19601
 ADMIN_PORT=18601
 
@@ -35,8 +42,8 @@ start_broker() {
 
 echo "== phase 1: provision principals and write the users file (seed $SEED)"
 start_broker env
-python -m chaos.daemon --bootstrap "127.0.0.1:$KAFKA_PORT" \
-  --admin-url "http://127.0.0.1:$ADMIN_PORT" --seed "$SEED" \
+$PYTHON -m chaos.daemon --bootstrap "127.0.0.1:$KAFKA_PORT" \
+  --admin-url "http://127.0.0.1:$ADMIN_PORT" --admin-token "$ADMIN_TOKEN" --seed "$SEED" \
   --principals "$PRINCIPALS" --provision-only --users-file-out "$WORK/users.json"
 kill "$BROKER_PID"; wait "$BROKER_PID" 2>/dev/null || true
 
@@ -44,8 +51,12 @@ echo "== phase 2: restart with SASL and those credentials"
 start_broker env KAFKA_WIRE_AUTH_SASLENABLED=true KAFKA_WIRE_AUTH_USERSFILE="$WORK/users.json"
 
 echo "== phase 3: attack for ${DURATION}s"
-python -m chaos.daemon --bootstrap "127.0.0.1:$KAFKA_PORT" \
-  --admin-url "http://127.0.0.1:$ADMIN_PORT" --seed "$SEED" \
+# Hard ceiling on the phase. A harness that overruns its own --duration is a
+# harness nobody will put in CI, so the budget is enforced from outside rather
+# than trusted.
+timeout $(( DURATION + 120 )) $PYTHON -m chaos.daemon \
+  --bootstrap "127.0.0.1:$KAFKA_PORT" \
+  --admin-url "http://127.0.0.1:$ADMIN_PORT" --admin-token "$ADMIN_TOKEN" --seed "$SEED" \
   --principals "$PRINCIPALS" --duration "$DURATION" \
   --forensics-root "$WORK/forensics"
 
