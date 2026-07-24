@@ -11,6 +11,7 @@ import sys
 import time
 import uuid
 
+import kafka
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import TopicAlreadyExistsError
@@ -43,14 +44,15 @@ def main() -> int:
     finally:
         admin.close()
 
-    producer = KafkaProducer(
-        bootstrap_servers=BROKERS,
-        # Required on kafka-python 3.x, which turns idempotent producing on by
-        # default. Idempotence needs InitProducerId, and a broker with no
-        # transaction coordinator does not offer it. kafka-python 2.x defaults
-        # this off and does not need the line.
-        enable_idempotence=False,
-    )
+    # kafka-python 3.x turns idempotent producing on by default. Idempotence
+    # needs InitProducerId, which a broker with no transaction coordinator does
+    # not offer, so it has to be switched off. kafka-python 2.x defaults it off
+    # and does not accept the argument at all, hence the version check rather
+    # than passing it unconditionally.
+    producer_args = {"bootstrap_servers": BROKERS}
+    if tuple(int(p) for p in kafka.__version__.split(".")[:1]) >= (3,):
+        producer_args["enable_idempotence"] = False
+    producer = KafkaProducer(**producer_args)
     # Resolve every future. send() is asynchronous and flush() does not raise
     # on a per-record failure, so a producer that silently dropped everything
     # would otherwise look like a success right up until the consumer found
