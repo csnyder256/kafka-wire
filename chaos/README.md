@@ -56,6 +56,15 @@ cannot read it is the stronger posture, because an authorization error is
 itself an existence oracle, and the harness should not penalize the safer
 behavior.
 
+## Known issue
+
+The daemon does not reliably exit when its `--duration` elapses: a 90 second
+run has been observed to keep going until an external timeout killed it. The
+run script therefore bounds the phase with `timeout`, and the harness runs on
+a schedule rather than as a blocking CI gate, because a gate that hangs is
+worse than no gate. The attacks, the assertions and the reporting all work;
+only the shutdown path is unreliable.
+
 ## Layout
 
 ```

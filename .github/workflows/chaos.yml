@@ -1,0 +1,50 @@
+name: Adversarial harness
+
+# Not part of the blocking CI gate, deliberately.
+#
+# The harness provisions, attacks and asserts correctly, and a short run
+# reports zero invariant violations. What it does not yet do reliably is exit
+# on its own --duration: a 90 second run has been observed to overrun until
+# the external timeout fires. Until that is fixed it would be a flaky gate,
+# and a flaky gate is worse than no gate, so it runs on a schedule and on
+# demand instead of on every push.
+#
+# See chaos/README.md for the known issue.
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Seconds to attack for'
+        default: '300'
+      principals:
+        description: 'Number of principals'
+        default: '4'
+
+permissions:
+  contents: read
+
+jobs:
+  chaos:
+    name: attack the broker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.25', cache: true }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: Attack
+        run: |
+          pip install --quiet -r chaos/requirements.txt
+          bash chaos/run.sh "${{ inputs.duration || 300 }}" "${{ inputs.principals || 4 }}"
+
+      - name: Forensics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-forensics
+          path: /tmp/tmp.*/forensics
+          if-no-files-found: ignore

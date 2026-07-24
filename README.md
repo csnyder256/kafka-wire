@@ -353,7 +353,9 @@ pip install -r chaos/requirements.txt
 bash chaos/run.sh 120 4
 ```
 
-It runs on every push. Building it is what surfaced the fact that
+It runs nightly rather than on every push, because the daemon does not yet
+exit reliably on its own duration; `chaos/README.md` says so plainly. Building
+it is what surfaced the fact that
 authorization was enforced on Produce and Fetch but not on the topic-admin
 APIs, so a principal with no grants could enumerate and delete every topic in
 the cluster. That is fixed, and invariant 9 is why.
