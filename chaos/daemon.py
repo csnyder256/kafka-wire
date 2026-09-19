@@ -53,6 +53,15 @@ from chaos.topology import (
 
 log = structlog.get_logger()
 
+# Hard run-hygiene bounds. The harness must exit on --duration even when a
+# module wedges (a client retrying a correctly-hidden topic forever, e.g.):
+# every adversary call is bounded to the remaining run window, baseline
+# shutdown gets a grace period before cancellation, and main() puts a hard
+# watchdog on the whole run so the daemon can never overrun its stated
+# duration and rely on the caller's external timeout (exit 124) to die.
+SHUTDOWN_GRACE_S = 30
+WATCHDOG_GRACE_S = 60
+
 
 # ── adversary registry ─────────────────────────────────────────────────
 
@@ -263,13 +272,33 @@ class ChaosRun:
                 for name in modules:
                     fn = ADVERSARIES[name]
                     try:
+                        remaining = deadline - time.time()
+                        if remaining <= 0:
+                            break
+                        # Bound every module call to the remaining run window.
+                        # A wedged module (e.g. an aiokafka client retrying a
+                        # correctly-hidden topic forever) must never be able to
+                        # carry the run past --duration.
                         if name in ("admin_token_brute",):
-                            res = fn(self.topology, self.args.admin_url, rng=rng)
+                            res = await asyncio.wait_for(
+                                asyncio.to_thread(fn, self.topology, self.args.admin_url, rng=rng),
+                                timeout=remaining,
+                            )
                         elif name == "cross_principal_offset_reset_via_admin":
-                            res = await fn(self.topology, self.args.admin_url, self.args.admin_token, rng=rng)
+                            res = await asyncio.wait_for(
+                                fn(self.topology, self.args.admin_url, self.args.admin_token, rng=rng),
+                                timeout=remaining,
+                            )
                         else:
-                            res = await fn(self.topology, self.args.bootstrap, rng=rng) \
-                                if inspect.iscoroutinefunction(fn) else fn(self.topology, self.args.admin_url, rng=rng)
+                            coro = fn(self.topology, self.args.bootstrap, rng=rng) \
+                                if inspect.iscoroutinefunction(fn) else \
+                                asyncio.to_thread(fn, self.topology, self.args.admin_url, rng=rng)
+                            res = await asyncio.wait_for(coro, timeout=remaining)
+                    except asyncio.TimeoutError:
+                        log.warning("chaos.adversary.timeout",
+                                    module=name,
+                                    remaining_s=round(deadline - time.time(), 1))
+                        continue
                     except InvariantViolation as v:
                         self._record_violation(v)
                         return 1
@@ -294,7 +323,18 @@ class ChaosRun:
                 await asyncio.sleep(0.5)
         finally:
             stop.set()
-            await asyncio.gather(*baseline_tasks, return_exceptions=True)
+            # Bounded shutdown: never let a wedged baseline client (or a
+            # baseline task that ignores the stop event) hang the daemon
+            # past the run window. Grace, then cancel.
+            done, pending = await asyncio.wait(baseline_tasks, timeout=SHUTDOWN_GRACE_S)
+            for t in pending:
+                t.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            # Surfaces CancelledError from tasks that ignored the stop event.
+            for t in done:
+                if not t.cancelled() and t.exception() is not None:
+                    log.warning("chaos.baseline.task_error", err=repr(t.exception()))
 
         self.stats["workload_records_consumed"] = len(all_received_records)
         log.info("chaos.run.complete",
@@ -362,6 +402,29 @@ def parse_args() -> argparse.Namespace:
     return ap.parse_args()
 
 
+def _run_with_watchdog(run: "ChaosRun") -> int:
+    """Run with a hard overall ceiling: duration + grace. The per-module
+    bounds keep the normal path inside --duration; this watchdog exists so
+    that even a pathological shutdown or provision cannot turn the run into
+    an open-ended wait that relies on the caller's external timeout."""
+
+    async def _bounded() -> int:
+        return await asyncio.wait_for(
+            run.run(), timeout=run.args.duration + WATCHDOG_GRACE_S)
+
+    try:
+        return asyncio.run(_bounded())
+    except asyncio.TimeoutError:
+        log.error("chaos.run.watchdog_timeout",
+                  duration=run.args.duration,
+                  grace_s=WATCHDOG_GRACE_S)
+        sys.stderr.write(
+            f"\n!!! HARNESS WATCHDOG: run exceeded {run.args.duration}s "
+            f"+ {WATCHDOG_GRACE_S}s grace and was terminated. A module or "
+            f"shutdown path is wedged. See chaos/daemon.py bounds. !!!\n")
+        return 2
+
+
 def main() -> int:
     args = parse_args()
     structlog.configure(
@@ -372,7 +435,7 @@ def main() -> int:
         ],
     )
     run = ChaosRun(args)
-    return asyncio.run(run.run())
+    return _run_with_watchdog(run)
 
 
 if __name__ == "__main__":
