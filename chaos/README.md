@@ -56,14 +56,23 @@ cannot read it is the stronger posture, because an authorization error is
 itself an existence oracle, and the harness should not penalize the safer
 behavior.
 
-## Known issue
+## Known issue (resolved 2026-09-19)
 
-The daemon does not reliably exit when its `--duration` elapses: a 90 second
-run has been observed to keep going until an external timeout killed it. The
-run script therefore bounds the phase with `timeout`, and the harness runs on
-a schedule rather than as a blocking CI gate, because a gate that hangs is
-worse than no gate. The attacks, the assertions and the reporting all work;
-only the shutdown path is unreliable.
+The daemon previously did not reliably exit when its `--duration` elapsed: a
+wedged adversary module (an aiokafka client retrying a correctly-hidden
+topic forever) carried the run past the deadline until an external timeout
+killed it. Fixed in `chaos/daemon.py`:
+
+- every adversary module call is bounded to the remaining run window
+  (`asyncio.wait_for`) -- a wedged module is logged as
+  `chaos.adversary.timeout` and skipped, and the run still ends on time;
+- baseline shutdown is bounded (30s grace) before tasks are cancelled;
+- `main()` wraps the whole run in a `duration + 60s` watchdog, so the
+  daemon can never overrun its own window -- the external `timeout` in
+  `run.sh` is now a pure backstop.
+
+A short run now reports zero invariant violations and exits 0 in well under
+its stated duration.
 
 ## Layout
 
