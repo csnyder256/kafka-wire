@@ -20,7 +20,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
@@ -39,7 +39,7 @@ jobs:
     name: race detector
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version: '1.25', cache: true }
       # The broker is one goroutine per connection plus background sweepers, so
@@ -50,7 +50,7 @@ jobs:
     name: object store conformance (MinIO)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version: '1.25', cache: true }
 
@@ -78,7 +78,7 @@ jobs:
     name: real client interop
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version: '1.25', cache: true }
       - uses: actions/setup-python@v5
@@ -136,7 +136,7 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version: '1.25', cache: true }
       # Pinned deliberately. The v6 action installs the golangci-lint v1 line,
@@ -151,7 +151,7 @@ jobs:
     name: docs are in sync
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version: '1.25', cache: true }
       # docs/configuration.md is generated from the config struct. If someone
