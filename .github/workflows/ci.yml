@@ -132,6 +132,17 @@ jobs:
         if: always()
         run: tail -200 "$GITHUB_WORKSPACE/broker.log" || true
 
+  govulncheck:
+    name: known vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: go.mod, cache: true }
+      # Reports only vulnerabilities the code actually reaches, in
+      # dependencies and in the standard library of the pinned toolchain.
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
   lint:
     name: lint
     runs-on: ubuntu-latest

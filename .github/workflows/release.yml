@@ -19,6 +19,11 @@ jobs:
       - uses: actions/setup-go@v7
         with: { go-version-file: go.mod, cache: true }
 
+      # The binaries embed this toolchain's standard library, so refuse to
+      # publish if it (or a dependency) has a known reachable vulnerability.
+      - name: No known reachable vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
       - name: Cross compile
         run: |
           VERSION="${GITHUB_REF_NAME:-dev}"
