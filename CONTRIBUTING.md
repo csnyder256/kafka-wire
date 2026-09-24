@@ -20,8 +20,8 @@ drives it with an independent Kafka client. It needs no Docker and no network.
 To exercise the S3 cold tier against a real server:
 
 ```sh
-docker run -d -p 9000:9000 -e MINIO_ROOT_USER=minioadmin \
-  -e MINIO_ROOT_PASSWORD=minioadmin quay.io/minio/minio server /data
+docker run -d -p 9000:9000 -e RUSTFS_ACCESS_KEY=minioadmin \
+  -e RUSTFS_SECRET_KEY=minioadmin rustfs/rustfs:1.0.0
 KAFKA_WIRE_TEST_S3_ENDPOINT=http://127.0.0.1:9000 go test ./internal/objstore/ -v
 ```
 

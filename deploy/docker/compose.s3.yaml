@@ -1,26 +1,34 @@
-# Broker plus MinIO, to try the cold-storage tier with no cloud account.
+# Broker plus a local S3-compatible server (RustFS), to try the cold-storage
+# tier with no cloud account.
 #   docker compose -f deploy/docker/compose.s3.yaml up
+#
+# RustFS stands in for MinIO here: MinIO stopped publishing public container
+# images in 2026. Any S3-compatible server works the same way; only the
+# endpoint and credentials below change.
 services:
-  minio:
-    image: quay.io/minio/minio:latest
-    command: server /data --console-address ":9001"
+  s3:
+    image: rustfs/rustfs:1.0.0
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      RUSTFS_ACCESS_KEY: kafkawire
+      RUSTFS_SECRET_KEY: kafkawire-secret
     ports: ["9000:9000", "9001:9001"]
-    volumes: ["minio-data:/data"]
+    volumes: ["s3-data:/data"]
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health"]
       interval: 5s
       retries: 20
 
   createbucket:
-    image: quay.io/minio/mc:latest
-    depends_on: { minio: { condition: service_healthy } }
+    image: amazon/aws-cli:latest
+    depends_on: { s3: { condition: service_healthy } }
+    environment:
+      AWS_ACCESS_KEY_ID: kafkawire
+      AWS_SECRET_ACCESS_KEY: kafkawire-secret
+      AWS_DEFAULT_REGION: us-east-1
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 minioadmin minioadmin &&
-      mc mb --ignore-existing local/kafka-wire &&
+      aws --endpoint-url http://s3:9000 s3api head-bucket --bucket kafka-wire 2>/dev/null ||
+      aws --endpoint-url http://s3:9000 s3 mb s3://kafka-wire &&
       echo bucket ready"
 
   kafka-wire:
@@ -32,11 +40,12 @@ services:
       KAFKA_WIRE_AUTH_ALLOWANON: "true"
       KAFKA_WIRE_ARCHIVE_BACKEND: s3
       KAFKA_WIRE_ARCHIVE_S3_BUCKET: kafka-wire
-      KAFKA_WIRE_ARCHIVE_S3_ENDPOINT: http://minio:9000
-      # MinIO, Ceph and SeaweedFS address buckets by path, not by subdomain.
+      KAFKA_WIRE_ARCHIVE_S3_ENDPOINT: http://s3:9000
+      # RustFS, MinIO, Ceph and SeaweedFS address buckets by path, not by
+      # subdomain.
       KAFKA_WIRE_ARCHIVE_S3_ADDRESSING: path
-      KAFKA_WIRE_ARCHIVE_S3_ACCESSKEY: minioadmin
-      KAFKA_WIRE_ARCHIVE_S3_SECRETKEY: minioadmin
+      KAFKA_WIRE_ARCHIVE_S3_ACCESSKEY: kafkawire
+      KAFKA_WIRE_ARCHIVE_S3_SECRETKEY: kafkawire-secret
       # Archive quickly so the tier is observable in a demo rather than in an
       # hour. Leave these at their defaults in production.
       KAFKA_WIRE_ARCHIVE_AGE: 1m
@@ -45,5 +54,5 @@ services:
     stop_grace_period: 30s
 
 volumes:
-  minio-data:
+  s3-data:
   kafka-wire-data:
