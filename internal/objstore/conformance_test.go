@@ -293,8 +293,8 @@ func TestFSRefusesUnwritableRoot(t *testing.T) {
 // default `go test ./...` stays hermetic. The CI e2e job and the local
 // docker-compose test profile both set it.
 //
-//	docker run -d -p 9000:9000 -e MINIO_ROOT_USER=minioadmin \
-//	  -e MINIO_ROOT_PASSWORD=minioadmin quay.io/minio/minio server /data
+//	docker run -d -p 9000:9000 -e RUSTFS_ACCESS_KEY=minioadmin \
+//	  -e RUSTFS_SECRET_KEY=minioadmin rustfs/rustfs:1.0.0
 //	KAFKA_WIRE_TEST_S3_ENDPOINT=http://127.0.0.1:9000 go test ./internal/objstore/
 func TestS3Conformance(t *testing.T) {
 	endpoint := os.Getenv("KAFKA_WIRE_TEST_S3_ENDPOINT")
