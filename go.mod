@@ -3,7 +3,7 @@ module github.com/csnyder256/kafka-wire
 go 1.25.0
 
 require (
-	github.com/golang/snappy v0.0.4
+	github.com/golang/snappy v1.0.0
 	github.com/klauspost/compress v1.19.1
 	github.com/minio/minio-go/v7 v7.2.1
 	github.com/prometheus/client_golang v1.24.1
