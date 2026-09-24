@@ -1,12 +1,23 @@
 # Keep Go dependencies and CI actions patched automatically.
 # The existing CI workflows gate every Dependabot PR before merge.
+#
+# Updates are grouped: a routine week is one PR for Go modules and one
+# for actions, instead of one PR per bump (ten landed at once in
+# September). Major Go module versions still arrive on their own PR,
+# because those are the ones that deserve a separate read.
 version: 2
 updates:
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      go-minor-and-patch:
+        update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]
