@@ -47,25 +47,27 @@ jobs:
       - run: go test -race ./... -timeout 20m
 
   objstore:
-    name: object store conformance (MinIO)
+    name: object store conformance (S3)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with: { go-version-file: go.mod, cache: true }
 
-      # Started as a step rather than a service container: MinIO needs a
-      # command argument, which the services block cannot express, and the
-      # bitnami mirror that could be used without one is no longer freely
-      # pullable.
-      - name: Start MinIO
+      # RustFS, an S3-compatible server, replaces MinIO here: MinIO stopped
+      # publishing public container images in 2026 (quay.io and Docker Hub
+      # both refuse the pull). The pinned tag keeps the server stable
+      # between runs; the credentials match the test's defaults.
+      - name: Start an S3 server
         run: |
-          docker run -d --name minio -p 9000:9000             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin             quay.io/minio/minio:latest server /data
+          docker run -d --name s3 -p 9000:9000 \
+            -e RUSTFS_ACCESS_KEY=minioadmin -e RUSTFS_SECRET_KEY=minioadmin \
+            rustfs/rustfs:1.0.0
           for i in $(seq 1 40); do
-            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1; then exit 0; fi
+            if curl -fsS http://127.0.0.1:9000/health >/dev/null 2>&1; then exit 0; fi
             sleep 2
           done
-          echo "MinIO did not become healthy"; docker logs minio; exit 1
+          echo "S3 server did not become healthy"; docker logs s3; exit 1
       # The same conformance suite that runs against the filesystem backend,
       # pointed at a real S3 server. A backend that passes one and not the
       # other is the failure this job exists to catch.

@@ -21,3 +21,19 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
+  # Container images: the Dockerfile's Go and Alpine bases, and the S3
+  # server the compose quickstart pins (deploy/docker/compose.s3.yaml).
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      docker:
+        patterns: ["*"]
+  - package-ecosystem: "docker-compose"
+    directory: "/deploy/docker"
+    schedule:
+      interval: "weekly"
+    groups:
+      docker-compose:
+        patterns: ["*"]
