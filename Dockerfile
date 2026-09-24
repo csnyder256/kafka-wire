@@ -1,6 +1,6 @@
 # Multi-arch, static, distroless. Built with:
 #   docker buildx build --platform linux/amd64,linux/arm64 -t kafka-wire .
-ARG GO_VERSION=1.25
+ARG GO_VERSION=1.26
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS build
 
 ARG TARGETOS
