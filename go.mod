@@ -2,6 +2,14 @@ module github.com/csnyder256/kafka-wire
 
 go 1.26.0
 
+// The Go release that builds everything: CI, the chaos run and the
+// release binaries (setup-go reads this line). `go 1.26.0` above is only
+// the minimum language version; without this pin, release builds used
+// Go 1.26.0 itself and shipped standard-library CVEs fixed in later patch
+// releases. Bump it when a new 1.26.x ships; the govulncheck job in CI
+// fails when the pinned standard library has a known reachable CVE.
+toolchain go1.26.8
+
 require (
 	github.com/golang/snappy v1.0.0
 	github.com/klauspost/compress v1.20.0
