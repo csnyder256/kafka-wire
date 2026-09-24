@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version-file: go.mod
           cache: true
 
       - name: Build
@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
-        with: { go-version: '1.25', cache: true }
+        with: { go-version-file: go.mod, cache: true }
       # The broker is one goroutine per connection plus background sweepers, so
       # the race detector is the test that matters most.
       - run: go test -race ./... -timeout 20m
@@ -52,7 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
-        with: { go-version: '1.25', cache: true }
+        with: { go-version-file: go.mod, cache: true }
 
       # Started as a step rather than a service container: MinIO needs a
       # command argument, which the services block cannot express, and the
@@ -80,7 +80,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
-        with: { go-version: '1.25', cache: true }
+        with: { go-version-file: go.mod, cache: true }
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
 
@@ -138,7 +138,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
-        with: { go-version: '1.25', cache: true }
+        with: { go-version-file: go.mod, cache: true }
       # Pinned deliberately. The v6 action installs the golangci-lint v1 line,
       # which is built with an older Go than this module targets and refuses
       # to run at all with "the Go language version used to build
@@ -153,7 +153,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
-        with: { go-version: '1.25', cache: true }
+        with: { go-version-file: go.mod, cache: true }
       # docs/configuration.md is generated from the config struct. If someone
       # adds a setting and forgets to regenerate, the reference silently rots,
       # so the build says so instead.
