@@ -2,8 +2,10 @@ package tiering
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -233,5 +235,49 @@ func TestAddCompletedEvictsOverlappingEntries(t *testing.T) {
 	}
 	if _, ok := m.Lookup("t", 1, 0); !ok {
 		t.Fatal("another partition's entry must be kept")
+	}
+}
+
+// Uploads run concurrently and each one checkpoints and records into the
+// manifest. The flushes used to share one temp file (one of two concurrent
+// renames failed, failing that upload) and serialized the pending map outside
+// the lock.
+func TestConcurrentUpdatesAllReachTheDisk(t *testing.T) {
+	dir := t.TempDir()
+	m, err := OpenManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const n = 40
+	errs := make(chan error, 3*n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			key := fmt.Sprintf("k%d", i)
+			p := &PendingUpload{Topic: "t", BaseOffset: int64(i * 10), S3Key: key, UploadID: "u"}
+			errs <- m.SetPending(p)
+			p.Parts = append(p.Parts, PendingUploadPart{PartNumber: 1})
+			errs <- m.SetPending(p)
+			errs <- m.AddCompleted(SegmentEntry{Topic: "t", BaseOffset: int64(i * 10), NextOffset: int64(i*10 + 10), S3Key: key})
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("a concurrent manifest update failed: %v", err)
+		}
+	}
+	reopened, err := OpenManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(reopened.AllForTopic("t")); got != n {
+		t.Fatalf("%d entries on disk, want %d", got, n)
+	}
+	if got := len(reopened.PendingAll()); got != 0 {
+		t.Fatalf("%d pending checkpoints on disk, want 0", got)
 	}
 }

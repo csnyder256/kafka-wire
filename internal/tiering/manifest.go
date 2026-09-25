@@ -99,6 +99,9 @@ type PendingUploadPart struct {
 type Manifest struct {
 	dir string
 	mu  sync.Mutex
+	// flushMu serializes flushes, so concurrent uploads never share a temp
+	// file and the last file written always holds the newest state.
+	flushMu sync.Mutex
 
 	completed []SegmentEntry
 	pending   map[string]*PendingUpload // key = s3_key
@@ -234,7 +237,9 @@ func (m *Manifest) AddCompleted(e SegmentEntry) error {
 // SetPending records a multipart upload's checkpoint state.
 func (m *Manifest) SetPending(p *PendingUpload) error {
 	m.mu.Lock()
-	m.pending[p.S3Key] = p
+	// A copy: the uploader keeps appending parts to its own value while
+	// another upload's flush may be serializing this one.
+	m.pending[p.S3Key] = clonePending(p)
 	m.mu.Unlock()
 	return m.flushPending()
 }
@@ -243,7 +248,16 @@ func (m *Manifest) SetPending(p *PendingUpload) error {
 func (m *Manifest) GetPending(s3Key string) *PendingUpload {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.pending[s3Key]
+	if p, ok := m.pending[s3Key]; ok {
+		return clonePending(p)
+	}
+	return nil
+}
+
+func clonePending(p *PendingUpload) *PendingUpload {
+	cp := *p
+	cp.Parts = append([]PendingUploadPart(nil), p.Parts...)
+	return &cp
 }
 
 // PendingAll returns all in-flight uploads (for resume on startup).
@@ -252,7 +266,7 @@ func (m *Manifest) PendingAll() []*PendingUpload {
 	defer m.mu.Unlock()
 	out := make([]*PendingUpload, 0, len(m.pending))
 	for _, p := range m.pending {
-		out = append(out, p)
+		out = append(out, clonePending(p))
 	}
 	return out
 }
@@ -333,24 +347,38 @@ func (m *Manifest) AllForTopic(topic string) []SegmentEntry {
 	return out
 }
 
+// The flushes take flushMu first and snapshot the state under mu, so writes
+// land on disk in order and never read the map or slice while an upload
+// changes it. Concurrent uploads used to share one temp file, and one of
+// them failed on the rename.
 func (m *Manifest) flushCompleted() error {
+	m.flushMu.Lock()
+	defer m.flushMu.Unlock()
 	m.mu.Lock()
-	wrapper := struct {
+	raw, err := json.MarshalIndent(struct {
 		Format   int            `json:"format_version"`
 		Segments []SegmentEntry `json:"segments"`
-	}{Format: 1, Segments: m.completed}
+	}{Format: 1, Segments: m.completed}, "", "  ")
 	m.mu.Unlock()
-	return atomicWrite(filepath.Join(m.dir, "archive.json"), wrapper)
+	if err != nil {
+		return fmt.Errorf("marshal archive.json: %w", err)
+	}
+	return atomicWrite(filepath.Join(m.dir, "archive.json"), raw)
 }
 
 func (m *Manifest) flushPending() error {
+	m.flushMu.Lock()
+	defer m.flushMu.Unlock()
 	m.mu.Lock()
-	wrapper := struct {
+	raw, err := json.MarshalIndent(struct {
 		Format  int                       `json:"format_version"`
 		Pending map[string]*PendingUpload `json:"pending"`
-	}{Format: 1, Pending: m.pending}
+	}{Format: 1, Pending: m.pending}, "", "  ")
 	m.mu.Unlock()
-	return atomicWrite(filepath.Join(m.dir, "archive_pending.json"), wrapper)
+	if err != nil {
+		return fmt.Errorf("marshal archive_pending.json: %w", err)
+	}
+	return atomicWrite(filepath.Join(m.dir, "archive_pending.json"), raw)
 }
 
 func (m *Manifest) flushBoth() error {
@@ -360,11 +388,7 @@ func (m *Manifest) flushBoth() error {
 	return m.flushPending()
 }
 
-func atomicWrite(path string, data interface{}) error {
-	raw, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal %s: %w", path, err)
-	}
+func atomicWrite(path string, raw []byte) error {
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
 		return err

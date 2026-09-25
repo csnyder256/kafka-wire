@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -460,6 +461,9 @@ func (h *completeHook) CompleteMultipart(ctx context.Context, key, uploadID stri
 // at the same path. The upload used to be recorded because the path still
 // existed, vouching for the new segment with the old bytes.
 func TestUploadNotRecordedWhenTheSegmentFileIsReplaced(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows refuses to delete a segment file the uploader holds open")
+	}
 	seg, _ := writeSegment(t, t.TempDir(), 4096)
 	fs, err := objstore.NewFS(t.TempDir())
 	if err != nil {
