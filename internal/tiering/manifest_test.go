@@ -120,7 +120,7 @@ func TestOpenManifest_GarbageFileBoots(t *testing.T) {
 	}
 }
 
-func TestHoldsNeedsAnExactMatch(t *testing.T) {
+func TestHoldsWhenTheArchiveCoversTheSegment(t *testing.T) {
 	m, err := OpenManifest(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
