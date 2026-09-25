@@ -173,15 +173,11 @@ FLAGS
 		}, backend, manifest, mreg)
 		go uploader.Run(runCtx, brk.Topics())
 		brk.AttachRestorer(tiering.NewRestorer("", cache, manifest, backend, mreg), manifest, cache)
-		// A segment is deleted locally only once it is archived, and
-		// archive.localretention trims archived copies before
-		// storage.retentionage would. Reads below the local log are served
-		// from the archive.
-		retention.Archived = func(topic string, partition int32, baseOffset int64) bool {
-			_, ok := manifest.Lookup(topic, partition, baseOffset)
-			return ok
+		// Retention deletes a segment locally only once the archive holds
+		// exactly that segment.
+		retention.Archived = func(topic string, partition int32, seg *storage.Segment) bool {
+			return manifest.Holds(topic, partition, seg.BaseOffset(), seg.NextOffset(), seg.Size())
 		}
-		retention.LocalRetentionMS = cfg.Archive.LocalRetention.Milliseconds()
 		logger.Info("archive.enabled", "backend", backend.Name(), "prefix", cfg.Archive.Prefix)
 	}
 	go storage.RunRetention(brk.Topics(), retention)

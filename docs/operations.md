@@ -49,11 +49,11 @@ archive manifest all live inside that directory, so nothing else moves.
 
 ### Changing retention
 
-`storage.retentionage`, `storage.retentionsize` and `archive.localretention`
-are enforced by a sweep that runs every minute, or more often when a window is
-shorter than two minutes. Lowering them deletes eligible segments on the next
-sweep, so lower them deliberately. With cold storage on, only segments that are
-already archived are eligible.
+`storage.retentionage` and `storage.retentionsize` are enforced by a sweep that
+runs every minute, or more often when the age window is shorter than two
+minutes. Lowering them deletes eligible segments on the next sweep, so lower
+them deliberately. With cold storage on, only segments the archive already holds
+are eligible.
 
 ### Upgrading
 

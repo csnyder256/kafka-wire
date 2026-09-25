@@ -371,6 +371,16 @@ func (b *Broker) DeleteTopic(name string) error {
 	if err := b.persistTopicsLocked(); err != nil {
 		return err
 	}
+	// Forget the topic's archive before its files go. A topic created later
+	// under the same name would otherwise inherit the manifest entries: its
+	// segments would never be uploaded, retention would take them for
+	// archived ones, and fetches below its local log would return this
+	// topic's records. The archived objects stay in the store.
+	if b.manifest != nil {
+		if err := b.manifest.ForgetTopic(name); err != nil {
+			return fmt.Errorf("forgetting the archive of topic %s: %w", name, err)
+		}
+	}
 	// Best-effort delete of the on-disk topic directory. filepath.Join rather
 	// than concatenation, so the path cannot be built out of a name that
 	// slipped through.
@@ -501,30 +511,22 @@ func (b *Broker) fetchInternal(topic string, partition int32, fetchOffset int64,
 	if err == nil {
 		return bytes, firstOffset, hwm, logStart, nil
 	}
-	// Local read failed. If fetchOffset is below the local log but not below
-	// the archive, serve it from cold storage: archive.localretention trims
-	// the local copies of archived segments, so this is the normal path for
-	// older offsets. The tenant gate inside fetchFromArchive prevents
-	// cross-tenant archive reads (defense in depth: caller already verified
-	// the topic-tenant match above).
-	if errors.Is(err, storage.ErrOffsetOutOfRange) && b.restorer != nil && fetchOffset < logStart {
-		if start, ok := b.archivedStart(topic, partition); ok && fetchOffset >= start {
-			archBytes, archOffset, archErr := b.fetchFromArchive(context.Background(), topic, partition, fetchOffset, maxBytes, principalTenant)
-			if archErr == nil {
-				return archBytes, archOffset, hwm, logStart, nil
-			}
-			// An auth failure is propagated so the operator sees an
-			// isolation event in the audit trail.
-			if errors.Is(archErr, ErrUnauthorizedTopic) {
-				return nil, 0, hwm, logStart, ErrUnauthorizedTopic
-			}
-			// Nothing archived at or after fetchOffset: the hole runs up to
-			// the local log, so continue from its start.
-			if errors.Is(archErr, storage.ErrOffsetOutOfRange) {
-				if localBytes, localOffset, localErr := l.FetchAt(logStart, maxBytes); localErr == nil {
-					return localBytes, localOffset, hwm, logStart, nil
-				}
-			}
+	// Local read failed. If it was an out-of-range below-logStart and
+	// we have S3 archival configured, try the archive fallback. The
+	// tenant gate inside fetchFromArchive prevents cross-tenant
+	// archive reads (defense in depth: caller already verified the
+	// topic-tenant match above).
+	if errors.Is(err, storage.ErrOffsetOutOfRange) && b.restorer != nil {
+		archBytes, archOffset, archErr := b.fetchFromArchive(context.Background(), topic, partition, fetchOffset, maxBytes, principalTenant)
+		if archErr == nil {
+			return archBytes, archOffset, hwm, logStart, nil
+		}
+		// Archive miss falls back to surfacing the original
+		// out-of-range error. If the archive call returned an
+		// auth failure, propagate that instead so the operator
+		// sees an isolation event in the audit trail.
+		if errors.Is(archErr, ErrUnauthorizedTopic) {
+			return nil, 0, hwm, logStart, ErrUnauthorizedTopic
 		}
 	}
 	return nil, 0, hwm, logStart, err
@@ -546,13 +548,7 @@ func (b *Broker) ListOffsets(topic string, partition int32, timestamp int64) (in
 	}
 	switch timestamp {
 	case -2:
-		// Segments trimmed from local disk are still readable from cold
-		// storage, so the partition starts where the archive does.
-		earliest := l.EarliestOffset()
-		if start, ok := b.archivedStart(topic, partition); ok && start < earliest {
-			earliest = start
-		}
-		return earliest, -1, nil
+		return l.EarliestOffset(), -1, nil
 	case -1:
 		return l.LatestOffset(), -1, nil
 	default:

@@ -117,3 +117,67 @@ func TestOpenManifest_GarbageFileBoots(t *testing.T) {
 		t.Fatalf("expected 0 pending, got %d", len(m.PendingAll()))
 	}
 }
+
+func TestHoldsNeedsAnExactMatch(t *testing.T) {
+	m, err := OpenManifest(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.AddCompleted(SegmentEntry{Topic: "t", Partition: 0, BaseOffset: 100, NextOffset: 200, SizeBytes: 4096, S3Key: "k"}); err != nil {
+		t.Fatal(err)
+	}
+	if !m.Holds("t", 0, 100, 200, 4096) {
+		t.Error("the archived segment itself must count as held")
+	}
+	// Same base offset, different segment: a reused topic name, for example.
+	if m.Holds("t", 0, 100, 180, 4096) || m.Holds("t", 0, 100, 200, 4000) {
+		t.Error("an entry whose end offset or size differs must not count as held")
+	}
+	if m.Holds("t", 1, 100, 200, 4096) || m.Holds("u", 0, 100, 200, 4096) {
+		t.Error("another partition or topic must not count as held")
+	}
+}
+
+// A deleted topic's entries used to outlive it. A topic recreated under the
+// same name then inherited them: the uploader skipped its segments as already
+// archived, and fetches below its local log returned the old topic's records.
+func TestForgetTopicDropsItsEntriesDurably(t *testing.T) {
+	dir := t.TempDir()
+	m, err := OpenManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, topic := range []string{"gone", "kept", "gone"} {
+		base := int64(i * 100)
+		if err := m.AddCompleted(SegmentEntry{Topic: topic, BaseOffset: base, NextOffset: base + 100, S3Key: topic + "-done-" + string(rune('a'+i))}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, topic := range []string{"gone", "kept"} {
+		if err := m.SetPending(&PendingUpload{Topic: topic, S3Key: topic + "-pending", UploadID: "u"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.ForgetTopic("gone"); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mm := range []*Manifest{m, reopened} {
+		if got := len(mm.AllForTopic("gone")); got != 0 {
+			t.Errorf("%d entries of the deleted topic remain", got)
+		}
+		if got := len(mm.AllForTopic("kept")); got != 1 {
+			t.Errorf("other topics must keep their entries, got %d", got)
+		}
+		if mm.GetPending("gone-pending") != nil {
+			t.Error("the deleted topic's pending upload must be dropped")
+		}
+		if mm.GetPending("kept-pending") == nil {
+			t.Error("another topic's pending upload must be kept")
+		}
+	}
+}

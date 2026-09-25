@@ -320,6 +320,14 @@ func (u *Uploader) uploadOne(ctx context.Context, seg SegmentSource) error {
 		return fmt.Errorf("complete multipart upload: %w", err)
 	}
 
+	// The topic may have been deleted while this segment was uploading. Its
+	// manifest entries were forgotten then, and recording this one would
+	// make a recreated topic's segment at the same offsets look archived.
+	if _, err := os.Stat(seg.LogPath()); err != nil {
+		_ = u.manifest.AbortPending(key)
+		return fmt.Errorf("segment removed during upload: %w", err)
+	}
+
 	entry := SegmentEntry{
 		Topic:      seg.Topic(),
 		Partition:  seg.Partition(),

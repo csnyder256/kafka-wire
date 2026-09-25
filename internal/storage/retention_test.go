@@ -34,8 +34,8 @@ func logWithSealed(t *testing.T, n int) *Log {
 	return l
 }
 
-func archivedBelow(offset int64) func(string, int32, int64) bool {
-	return func(_ string, _ int32, base int64) bool { return base < offset }
+func archivedBelow(offset int64) func(string, int32, *Segment) bool {
+	return func(_ string, _ int32, seg *Segment) bool { return seg.BaseOffset() < offset }
 }
 
 var later = time.Now().Add(2 * time.Hour)
@@ -70,31 +70,12 @@ func TestRetentionNeverDeletesAheadOfTheArchive(t *testing.T) {
 	}
 }
 
-// archive.localretention was documented, validated and passed to the
-// uploader, which never read it, so archived segments stayed on local disk
-// for the full storage.retentionage.
-func TestLocalRetentionTrimsArchivedCopies(t *testing.T) {
-	l := logWithSealed(t, 3)
-	cfg := RetentionConfig{
-		RetentionMS:      (7 * 24 * time.Hour).Milliseconds(),
-		LocalRetentionMS: time.Hour.Milliseconds(),
-		Archived:         archivedBelow(2),
-	}
-	sweepOnce(logList{l}, cfg, time.Now().Add(30*time.Minute))
-	if got := len(l.SealedSegments()); got != 3 {
-		t.Fatalf("%d sealed segments left, want 3: none is older than localretention yet", got)
-	}
-	sweepOnce(logList{l}, cfg, later)
-	if got := l.LogStartOffset(); got != 2 {
-		t.Fatalf("log start = %d, want 2: both archived copies go, the unarchived one stays", got)
-	}
-}
-
-func TestLocalRetentionNeedsAnArchive(t *testing.T) {
+func TestNothingArchivedNothingDeleted(t *testing.T) {
 	l := logWithSealed(t, 2)
-	sweepOnce(logList{l}, RetentionConfig{LocalRetentionMS: time.Hour.Milliseconds()}, later)
+	cfg := RetentionConfig{RetentionMS: time.Hour.Milliseconds(), RetentionBytes: 1, Archived: archivedBelow(0)}
+	sweepOnce(logList{l}, cfg, later)
 	if got := len(l.SealedSegments()); got != 2 {
-		t.Fatalf("%d sealed segments left, want 2: nothing is archived", got)
+		t.Fatalf("%d sealed segments left, want 2: none is archived", got)
 	}
 }
 
@@ -113,15 +94,14 @@ func TestAgeAndSizeRulesBothApply(t *testing.T) {
 	}
 }
 
-func TestSweepIntervalFollowsTheShortestWindow(t *testing.T) {
+func TestSweepIntervalFollowsShortWindows(t *testing.T) {
 	cases := []struct {
 		cfg  RetentionConfig
 		want time.Duration
 	}{
 		{RetentionConfig{}, 60 * time.Second},
 		{RetentionConfig{Tick: 60 * time.Second, RetentionMS: (168 * time.Hour).Milliseconds()}, 60 * time.Second},
-		{RetentionConfig{Tick: 60 * time.Second, LocalRetentionMS: 2000}, time.Second},
-		{RetentionConfig{Tick: 60 * time.Second, LocalRetentionMS: 30_000}, 15 * time.Second},
+		{RetentionConfig{Tick: 60 * time.Second, RetentionMS: 30_000}, 15 * time.Second},
 		{RetentionConfig{Tick: 60 * time.Second, RetentionMS: 500}, time.Second},
 	}
 	for _, c := range cases {

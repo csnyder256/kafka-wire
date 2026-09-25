@@ -28,17 +28,15 @@ Sealed segments older than `archive.age` are uploaded. A consumer asking for
 an offset that is missing locally triggers a transparent restore into an
 on-disk LRU cache, verified against the SHA-256 recorded at upload time.
 
-Once a segment is archived, its local copy is deleted when it is older than
-`archive.localretention` (24h by default), so cold storage shrinks the local
-footprint instead of only holding a second copy. The partition still starts
-where the archive does: a consumer that resets to the earliest offset reads the
-archived segments first.
+**Local copies are not deleted after archiving yet.** Archived segments stay on
+local disk until ordinary retention (`storage.retentionage`,
+`storage.retentionsize`) removes them, so cold storage is currently a second
+copy rather than a way to shrink the local footprint. `archive.localretention`
+is accepted but not enforced yet.
 
-With cold storage on, retention never deletes a segment that has not been
-archived yet, whichever rule (`storage.retentionage`, `storage.retentionsize`,
-`archive.localretention`) would otherwise remove it. If uploads fail, the
-partition grows on local disk until they recover, instead of losing records the
-archive never received.
+With cold storage on, retention only removes segments the archive already
+holds. If uploads fail, the partition grows on local disk until they recover,
+instead of losing records the archive never received.
 
 None of this is on by default.
 

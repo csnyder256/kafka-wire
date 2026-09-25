@@ -268,6 +268,38 @@ func (m *Manifest) Lookup(topic string, partition int32, baseOffset int64) (Segm
 	return SegmentEntry{}, false
 }
 
+// Holds reports whether the archive holds exactly this segment: an entry at
+// the same (topic, partition, baseOffset) with the same end offset and size.
+// A stale entry, say from a deleted topic whose name was reused, must not
+// vouch for a different segment that happens to share a base offset.
+func (m *Manifest) Holds(topic string, partition int32, baseOffset, nextOffset, sizeBytes int64) bool {
+	e, ok := m.Lookup(topic, partition, baseOffset)
+	return ok && e.NextOffset == nextOffset && e.SizeBytes == sizeBytes
+}
+
+// ForgetTopic drops every completed and pending entry for a deleted topic,
+// so a topic created later under the same name starts with an empty
+// archive: its segments get uploaded, retention does not mistake them for
+// archived ones, and fetches below its local log never return the deleted
+// topic's records. The archived objects stay in the store, unreferenced.
+func (m *Manifest) ForgetTopic(topic string) error {
+	m.mu.Lock()
+	kept := make([]SegmentEntry, 0, len(m.completed))
+	for _, e := range m.completed {
+		if e.Topic != topic {
+			kept = append(kept, e)
+		}
+	}
+	m.completed = kept
+	for key, p := range m.pending {
+		if p.Topic == topic {
+			delete(m.pending, key)
+		}
+	}
+	m.mu.Unlock()
+	return m.flushBoth()
+}
+
 // All returns all archived segments. Used by the dashboard.
 func (m *Manifest) All() []SegmentEntry {
 	m.mu.Lock()

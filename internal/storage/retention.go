@@ -11,8 +11,7 @@ import (
 // With cold storage on, Archived is set and no rule deletes a segment the
 // uploader has not yet put in the archive: while uploads are failing a
 // partition grows on local disk instead of losing records the archive never
-// received. LocalRetentionMS then trims the local copies of archived
-// segments early; reads below the local log are served from the archive.
+// received.
 type RetentionConfig struct {
 	RetentionMS    int64         // age cap in ms; 0 = unlimited
 	RetentionBytes int64         // size cap; 0 or negative = unlimited
@@ -20,10 +19,7 @@ type RetentionConfig struct {
 
 	// Archived reports whether a sealed segment is durably in cold storage.
 	// Nil when cold storage is off.
-	Archived func(topic string, partition int32, baseOffset int64) bool
-	// LocalRetentionMS deletes the local copy of an archived segment once it
-	// is this old (archive.localretention). 0 disables it. Needs Archived.
-	LocalRetentionMS int64
+	Archived func(topic string, partition int32, seg *Segment) bool
 }
 
 // LogProvider is the minimum surface RunRetention needs from the
@@ -50,10 +46,8 @@ func sweepInterval(cfg RetentionConfig) time.Duration {
 	if d <= 0 {
 		d = 60 * time.Second
 	}
-	for _, ms := range []int64{cfg.RetentionMS, cfg.LocalRetentionMS} {
-		if half := time.Duration(ms) * time.Millisecond / 2; ms > 0 && half < d {
-			d = max(half, time.Second)
-		}
+	if half := time.Duration(cfg.RetentionMS) * time.Millisecond / 2; cfg.RetentionMS > 0 && half < d {
+		d = max(half, time.Second)
 	}
 	return d
 }
@@ -72,7 +66,7 @@ func sweepOnce(provider LogProvider, cfg RetentionConfig, now time.Time) {
 		deletable := len(segs)
 		if cfg.Archived != nil {
 			for i, seg := range segs {
-				if !cfg.Archived(l.Topic(), l.Partition(), seg.BaseOffset()) {
+				if !cfg.Archived(l.Topic(), l.Partition(), seg) {
 					deletable = i
 					break
 				}
@@ -80,17 +74,12 @@ func sweepOnce(provider LogProvider, cfg RetentionConfig, now time.Time) {
 		}
 
 		// Walk the prefix oldest-first, stopping at the first segment
-		// inside every age window. The segments are in BaseOffset order
+		// inside the age window. The segments are in BaseOffset order
 		// (== creation order) so the first "kept" segment is also the
 		// cutoff.
 		var cutoff int64 = -1
 		for _, seg := range segs[:deletable] {
-			ageMS := now.Sub(seg.CreatedAt()).Milliseconds()
-			expired := cfg.RetentionMS > 0 && ageMS > cfg.RetentionMS
-			if cfg.Archived != nil && cfg.LocalRetentionMS > 0 && ageMS > cfg.LocalRetentionMS {
-				expired = true
-			}
-			if !expired {
+			if cfg.RetentionMS <= 0 || now.Sub(seg.CreatedAt()).Milliseconds() <= cfg.RetentionMS {
 				break
 			}
 			cutoff = seg.NextOffset()

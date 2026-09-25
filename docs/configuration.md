@@ -101,7 +101,7 @@ ARCHIVE
     env: KAFKA_WIRE_ARCHIVE_AGE
 
   archive.localretention  (duration, default 24h)
-    delete the local copy of an archived segment once it is this old. Reads below the local log are served from the archive
+    not enforced yet: archived segments stay on local disk until storage.retentionage or storage.retentionsize removes them
     env: KAFKA_WIRE_ARCHIVE_LOCALRETENTION
 
   archive.concurrency  (size, default 2)

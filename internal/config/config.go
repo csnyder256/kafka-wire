@@ -87,7 +87,7 @@ type ArchiveConfig struct {
 	Backend        string        `yaml:"backend" def:"none" doc:"cold storage tier: none, fs, or s3. s3 covers AWS plus every S3-compatible store"`
 	Prefix         string        `yaml:"prefix" def:"kafka-wire/" doc:"key prefix for archived segments. Lets several brokers share one bucket"`
 	Age            time.Duration `yaml:"age" def:"1h" doc:"a sealed segment becomes eligible for upload once it is this old"`
-	LocalRetention time.Duration `yaml:"localretention" def:"24h" doc:"delete the local copy of an archived segment once it is this old. Reads below the local log are served from the archive"`
+	LocalRetention time.Duration `yaml:"localretention" def:"24h" doc:"not enforced yet: archived segments stay on local disk until storage.retentionage or storage.retentionsize removes them"`
 	Concurrency    int           `yaml:"concurrency" def:"2" doc:"how many segment uploads may run at once. Multiply by archive.s3.partsize to budget memory"`
 	CacheBytes     int64         `yaml:"cachebytes" def:"2GiB" doc:"size of the on-disk LRU cache holding segments restored from cold storage"`
 

@@ -5,12 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"time"
 
 	"github.com/csnyder256/kafka-wire/internal/storage"
-	"github.com/csnyder256/kafka-wire/internal/tiering"
 )
 
 // fetchFromArchive looks up the requested offset in the S3 manifest,
@@ -30,20 +28,24 @@ func (b *Broker) fetchFromArchive(ctx context.Context, topic string, partition i
 		return nil, fetchOffset, storage.ErrOffsetOutOfRange
 	}
 
-	// Find the archived segment whose [BaseOffset, NextOffset) contains
-	// fetchOffset or, when fetchOffset falls in a hole (segments that older
-	// versions deleted before they were archived), the first one after it.
-	// Like a gap in a compacted topic, the fetch continues with the next
-	// records instead of failing, which would send a consumer reset to
-	// earliest straight back into the hole.
-	entry, hit := archivedSegmentFrom(b.manifest.AllForTopic(topic), partition, fetchOffset)
+	// Find the archived segment whose [BaseOffset, NextOffset)
+	// contains fetchOffset.
+	var hit bool
+	var baseOffset int64
+	var entryTenant string
+	for _, e := range b.manifest.AllForTopic(topic) {
+		if e.Partition != partition {
+			continue
+		}
+		if fetchOffset >= e.BaseOffset && fetchOffset < e.NextOffset {
+			baseOffset = e.BaseOffset
+			entryTenant = e.TenantID
+			hit = true
+			break
+		}
+	}
 	if !hit {
 		return nil, fetchOffset, storage.ErrOffsetOutOfRange
-	}
-	baseOffset, entryTenant := entry.BaseOffset, entry.TenantID
-	if baseOffset > fetchOffset {
-		slog.Warn("archive.fetch.gap_skipped", "topic", topic, "partition", partition,
-			"fetch_offset", fetchOffset, "resumed_at", baseOffset)
 	}
 
 	// Cross-tenant access prevention: requested tenant must match
@@ -76,9 +78,8 @@ func (b *Broker) fetchFromArchive(ctx context.Context, topic string, partition i
 	}
 	totalSize := stat.Size()
 
-	// Scan forward for the first batch ending at or after fetchOffset: the
-	// one bracketing it, or the segment's first batch after a hole. Linear;
-	// bounded by a 1GB segment cap and
+	// Scan forward looking for the batch whose [BaseOffset, LastOffset]
+	// brackets fetchOffset. Linear; bounded by a 1GB segment cap and
 	// 4KB-16KB index intervals, so ~64K-250K batches max, sub-millisecond.
 	header := make([]byte, 61)
 	pos := int64(0)
@@ -91,7 +92,7 @@ func (b *Broker) fetchFromArchive(ctx context.Context, topic string, partition i
 		if err != nil {
 			return nil, fetchOffset, fmt.Errorf("parse archived batch at %d: %w", pos, err)
 		}
-		if h.LastOffset() >= fetchOffset {
+		if fetchOffset >= h.BaseOffset && fetchOffset <= h.LastOffset() {
 			startPos = pos
 			break
 		}
@@ -163,40 +164,3 @@ func trimToBatchBoundary(buf []byte) []byte {
 // Used to silence the unused-import linter for `os` if compilers
 // complain. Stat is used above; this is a no-op.
 var _ = os.Stat
-
-// archivedSegmentFrom returns the archived segment of partition holding
-// offset, or else the first archived segment after it.
-func archivedSegmentFrom(entries []tiering.SegmentEntry, partition int32, offset int64) (tiering.SegmentEntry, bool) {
-	var best tiering.SegmentEntry
-	found := false
-	for _, e := range entries {
-		if e.Partition != partition || e.NextOffset <= offset {
-			continue
-		}
-		if !found || e.BaseOffset < best.BaseOffset {
-			best, found = e, true
-		}
-	}
-	return best, found
-}
-
-// archiveStart returns the first offset of partition held in cold storage.
-func archiveStart(entries []tiering.SegmentEntry, partition int32) (int64, bool) {
-	var start int64
-	found := false
-	for _, e := range entries {
-		if e.Partition == partition && (!found || e.BaseOffset < start) {
-			start, found = e.BaseOffset, true
-		}
-	}
-	return start, found
-}
-
-// archivedStart is archiveStart for a topic's partition, when cold storage
-// is attached.
-func (b *Broker) archivedStart(topic string, partition int32) (int64, bool) {
-	if b.manifest == nil {
-		return 0, false
-	}
-	return archiveStart(b.manifest.AllForTopic(topic), partition)
-}
