@@ -40,6 +40,17 @@ func localSegmentCount(dataDir, topic string) int {
 	return n
 }
 
+func archivedObjectCount(archiveDir string) int {
+	n := 0
+	_ = filepath.Walk(archiveDir, func(p string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() && strings.HasSuffix(p, ".log") {
+			n++
+		}
+		return nil
+	})
+	return n
+}
+
 func consumeValues(t *testing.T, addr, topic string, n int) [][]byte {
 	t.Helper()
 	c := newClient(t, addr, kgo.ConsumeTopics(topic), kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()))
@@ -70,7 +81,6 @@ func TestRetentionWaitsForTheArchive(t *testing.T) {
 		"KAFKA_WIRE_ARCHIVE_AGE=1s",
 		"KAFKA_WIRE_STORAGE_RETENTIONAGE=3s",
 		"KAFKA_WIRE_STORAGE_RETENTIONSIZE=16KiB",
-		"KAFKA_WIRE_LOG_LEVEL=info",
 	)
 	// The fs backend stages uploads in <archive>/uploads, created at startup.
 	// A file in its place makes every upload fail.
@@ -91,8 +101,10 @@ func TestRetentionWaitsForTheArchive(t *testing.T) {
 	if after := localSegmentCount(dataDir, topic); after < before {
 		t.Fatalf("%d of %d local segments were deleted while none had been archived", before-after, before)
 	}
-	if !strings.Contains(b.out.String(), "upload_failed") {
-		t.Fatalf("expected the uploads to fail; broker log:\n%s", b.out.String())
+	// Nothing reached the archive, so nothing was eligible. (The broker's
+	// log is not read here: the process is still writing it.)
+	if n := archivedObjectCount(archiveDir); n != 0 {
+		t.Fatalf("expected every upload to fail, but %d objects reached the archive", n)
 	}
 	if got := len(consumeValues(t, b.addr, topic, 400)); got != 400 {
 		t.Fatalf("read back %d of 400 records", got)
