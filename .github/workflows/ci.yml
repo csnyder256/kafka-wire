@@ -145,6 +145,28 @@ jobs:
       # dependencies and in the standard library of the pinned toolchain.
       - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+  # The Dockerfile otherwise only runs at release time. This builds it on
+  # every change (base image bumps from Dependabot included) and checks the
+  # image's Go is at least the toolchain go.mod pins, the one govulncheck
+  # vouches for.
+  image:
+    name: container image builds on the pinned toolchain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: docker build -t kafka-wire:ci .
+      - name: The image's Go is not older than go.mod's toolchain
+        run: |
+          want="$(sed -n 's/^toolchain //p' go.mod)"
+          got="$(docker run --rm kafka-wire:ci version | grep -o 'go1[0-9.]*')"
+          echo "image built with $got; go.mod pins $want"
+          oldest="$(printf '%s\n' "$want" "$got" | sort -V | head -n 1)"
+          if [ -z "$got" ] || [ "$oldest" != "$want" ]; then
+            echo "the image was built with an older Go than go.mod pins"
+            exit 1
+          fi
+
   lint:
     name: lint
     runs-on: ubuntu-latest

@@ -10,19 +10,27 @@ permissions:
   packages: write
 
 jobs:
+  # The binaries and the image both embed the pinned toolchain's standard
+  # library, so neither publishes if it (or a dependency) has a known
+  # reachable vulnerability.
+  vulncheck:
+    name: no known reachable vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: go.mod, cache: true }
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
   binaries:
     name: binaries
+    needs: vulncheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: actions/setup-go@v7
         with: { go-version-file: go.mod, cache: true }
-
-      # The binaries embed this toolchain's standard library, so refuse to
-      # publish if it (or a dependency) has a known reachable vulnerability.
-      - name: No known reachable vulnerabilities
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Cross compile
         run: |
@@ -57,6 +65,7 @@ jobs:
 
   image:
     name: container image
+    needs: vulncheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
