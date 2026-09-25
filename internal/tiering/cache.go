@@ -64,6 +64,27 @@ func (c *Cache) PathTenant(tenant, topic string, partition int32, baseOffset int
 	return filepath.Join(c.dir, "tenants", tenant, topic, fmt.Sprintf("%d", partition), fmt.Sprintf("%020d.log", baseOffset))
 }
 
+// DropTopic removes every restored segment of topic, for every tenant, so
+// a topic created later under the same name never reads a deleted topic's
+// segments. (Cached files are keyed by topic, partition and offset only.)
+func (c *Cache) DropTopic(topic string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	dirs := []string{filepath.Join(c.dir, topic)}
+	tenants, _ := os.ReadDir(filepath.Join(c.dir, "tenants"))
+	for _, t := range tenants {
+		if t.IsDir() {
+			dirs = append(dirs, filepath.Join(c.dir, "tenants", t.Name(), topic))
+		}
+	}
+	for _, d := range dirs {
+		if err := os.RemoveAll(d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Has returns true if the cache contains this segment's file.
 func (c *Cache) Has(topic string, partition int32, baseOffset int64) bool {
 	return c.HasTenant("", topic, partition, baseOffset)

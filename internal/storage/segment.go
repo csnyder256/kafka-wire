@@ -222,6 +222,12 @@ func (s *Segment) CreatedAt() time.Time { return s.createdAt }
 // ShouldRoll returns true if this segment should be sealed because it
 // exceeds size or age thresholds.
 func (s *Segment) ShouldRoll() bool {
+	// An empty segment has nothing to seal. Rolling it opened a successor at
+	// the same base offset, on the same file: a sealed "phantom" that shared
+	// the real segment's .log and could never match its archived copy.
+	if s.logSize == 0 {
+		return false
+	}
 	if s.maxBytes > 0 && s.logSize >= s.maxBytes {
 		return true
 	}

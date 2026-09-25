@@ -31,7 +31,12 @@ on-disk LRU cache, verified against the SHA-256 recorded at upload time.
 **Local copies are not deleted after archiving yet.** Archived segments stay on
 local disk until ordinary retention (`storage.retentionage`,
 `storage.retentionsize`) removes them, so cold storage is currently a second
-copy rather than a way to shrink the local footprint.
+copy rather than a way to shrink the local footprint. `archive.localretention`
+is accepted but not enforced yet.
+
+With cold storage on, retention only removes segments the archive already
+holds. If uploads fail, the partition grows on local disk until they recover,
+instead of losing records the archive never received.
 
 None of this is on by default.
 

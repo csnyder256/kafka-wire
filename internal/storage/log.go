@@ -330,6 +330,9 @@ func (l *Log) Append(batches [][]byte) (firstOffset int64, err error) {
 // Caller must hold l.mu.
 func (l *Log) rollLocked() (*Segment, error) {
 	old := l.segments[len(l.segments)-1]
+	if old.NextOffset() == old.BaseOffset() {
+		return old, nil // empty: a successor would reuse its base offset and file
+	}
 	if err := old.Seal(); err != nil {
 		return nil, err
 	}

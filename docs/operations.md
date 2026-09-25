@@ -32,8 +32,9 @@ In rough order of how much trouble you are in:
    producers start seeing retriable errors. Alert well before that point.
 2. **Consumer group lag growing without bound.** The consumer is slower than the
    producer, or it is dead.
-3. **Archive failures.** If uploads are failing, cold storage has stopped being
-   a second copy, and ordinary retention will eventually delete the local one.
+3. **Archive failures.** While uploads are failing, retention keeps every
+   segment that has not been archived, so local disk grows until they recover
+   (and the disk guard pauses writes at `storage.diskfreemin`).
 4. **No produce traffic on a topic that normally has some.** Usually a client
    problem, but it is the earliest signal of one.
 5. **Restore failures.** Consumers reading old offsets cannot make progress.
@@ -49,8 +50,10 @@ archive manifest all live inside that directory, so nothing else moves.
 ### Changing retention
 
 `storage.retentionage` and `storage.retentionsize` are enforced by a sweep that
-runs every minute. Lowering them deletes eligible segments on the next sweep, so
-lower them deliberately.
+runs every minute, or more often when the age window is shorter than two
+minutes. Lowering them deletes eligible segments on the next sweep, so lower
+them deliberately. With cold storage on, only segments the archive already holds
+are eligible.
 
 ### Upgrading
 

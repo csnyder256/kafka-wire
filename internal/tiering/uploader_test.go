@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -387,5 +388,105 @@ func TestResumeRefusedWhenSegmentChanged(t *testing.T) {
 	}
 	if counter.partsSent != 2 {
 		t.Errorf("the whole segment should be re-sent; parts=%d want 2", counter.partsSent)
+	}
+}
+
+type segmentList []SegmentSource
+
+func (l segmentList) AllSealedSegments() []SegmentSource { return l }
+
+// Boot recovery can truncate a damaged segment that was already archived.
+// The archive's copy is the complete one and must never be replaced by the
+// shorter local copy.
+func TestArchivedPositionIsNeverUploadedOver(t *testing.T) {
+	seg, _ := writeSegment(t, t.TempDir(), 4096)
+	store, err := objstore.NewFS(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := OpenManifest(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	complete := SegmentEntry{Topic: seg.topic, Partition: seg.partition, BaseOffset: seg.base,
+		NextOffset: seg.next + 50, SizeBytes: seg.size * 2, S3Key: "complete"}
+	if err := m.AddCompleted(complete); err != nil {
+		t.Fatal(err)
+	}
+	u := NewUploader(Config{Prefix: "archive/", PartSize: objstore.MinPartSize}, store, m, nullMetrics{})
+
+	u.sweep(context.Background(), segmentList{seg})
+
+	got, _ := m.Lookup(seg.topic, seg.partition, seg.base)
+	if got.S3Key != "complete" || got.NextOffset != complete.NextOffset {
+		t.Fatalf("the archived entry was replaced: %+v", got)
+	}
+}
+
+// A deleted topic's leftover object sits at exactly the key a recreated
+// topic's segment reuses. After a crash mid-upload, the reconciler used to
+// adopt whatever object it found there, recording the recreated segment as
+// archived with the old topic's bytes behind it.
+func TestReconcileRefusesAnotherUploadsObject(t *testing.T) {
+	m, p := pendingFixture(t, t.TempDir())
+	st := newScripted(t)
+	st.statInfo = &objstore.ObjectInfo{Key: p.S3Key, Size: 4096, Metadata: map[string]string{"sha256": "0ldt0p1c"}}
+	u := NewUploader(Config{}, st, m, nullMetrics{})
+
+	u.reconcileOrAbort(context.Background(), p)
+
+	if _, ok := m.Lookup(p.Topic, p.Partition, p.BaseOffset); ok {
+		t.Fatal("an object with another digest must not be adopted")
+	}
+	if len(m.PendingAll()) != 0 {
+		t.Fatal("the checkpoint should be dropped so the segment uploads again")
+	}
+}
+
+// completeHook runs a function just before the upload is completed.
+type completeHook struct {
+	objstore.Store
+	before func()
+}
+
+func (h *completeHook) CompleteMultipart(ctx context.Context, key, uploadID string, parts []objstore.Part) error {
+	h.before()
+	return h.Store.CompleteMultipart(ctx, key, uploadID, parts)
+}
+
+// A topic deleted and recreated while its segment uploads leaves a new file
+// at the same path. The upload used to be recorded because the path still
+// existed, vouching for the new segment with the old bytes.
+func TestUploadNotRecordedWhenTheSegmentFileIsReplaced(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows refuses to delete a segment file the uploader holds open")
+	}
+	seg, _ := writeSegment(t, t.TempDir(), 4096)
+	fs, err := objstore.NewFS(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &completeHook{Store: fs, before: func() {
+		if err := os.Remove(seg.path); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(seg.path, bytes.Repeat([]byte{7}, int(seg.size)), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}}
+	m, err := OpenManifest(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := NewUploader(Config{Prefix: "archive/", PartSize: objstore.MinPartSize}, store, m, nullMetrics{})
+
+	if err := u.uploadOne(context.Background(), seg); err == nil {
+		t.Fatal("expected the upload to be refused")
+	}
+	if _, ok := m.Lookup(seg.topic, seg.partition, seg.base); ok {
+		t.Fatal("an upload of a replaced file must not be recorded")
+	}
+	if len(m.PendingAll()) != 0 {
+		t.Fatal("the checkpoint should be dropped")
 	}
 }

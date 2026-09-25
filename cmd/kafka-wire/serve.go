@@ -138,14 +138,16 @@ FLAGS
 		go storage.RunSyncer(brk.Topics(), cfg.Storage.FsyncInterval)
 	}
 
-	go storage.RunRetention(brk.Topics(), storage.RetentionConfig{
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Retention starts once cold storage is set up, because with an archive
+	// it must know what the uploader has archived (see below).
+	retention := storage.RetentionConfig{
 		RetentionMS:    cfg.Storage.RetentionAge.Milliseconds(),
 		RetentionBytes: cfg.Storage.RetentionSize,
 		Tick:           60 * time.Second,
-	})
-
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	}
 
 	// Cold storage. Absent by default, and when present it is chosen purely
 	// by configuration: nothing above this call knows which backend won.
@@ -163,17 +165,22 @@ FLAGS
 			return fmt.Errorf("opening the restore cache: %w", err)
 		}
 		uploader := tiering.NewUploader(tiering.Config{
-			Prefix:         cfg.Archive.Prefix,
-			ArchiveAge:     cfg.Archive.Age,
-			LocalRetention: cfg.Archive.LocalRetention,
-			PartSize:       cfg.Archive.S3.PartSize,
-			Tick:           30 * time.Second,
-			Concurrency:    cfg.Archive.Concurrency,
+			Prefix:      cfg.Archive.Prefix,
+			ArchiveAge:  cfg.Archive.Age,
+			PartSize:    cfg.Archive.S3.PartSize,
+			Tick:        30 * time.Second,
+			Concurrency: cfg.Archive.Concurrency,
 		}, backend, manifest, mreg)
 		go uploader.Run(runCtx, brk.Topics())
 		brk.AttachRestorer(tiering.NewRestorer("", cache, manifest, backend, mreg), manifest, cache)
+		// Retention deletes a segment locally only once the archive holds
+		// exactly that segment.
+		retention.Archived = func(topic string, partition int32, seg *storage.Segment) bool {
+			return manifest.Holds(topic, partition, seg.BaseOffset(), seg.NextOffset(), seg.Size())
+		}
 		logger.Info("archive.enabled", "backend", backend.Name(), "prefix", cfg.Archive.Prefix)
 	}
+	go storage.RunRetention(brk.Topics(), retention)
 
 	listener, err := kafkaListener(cfg)
 	if err != nil {

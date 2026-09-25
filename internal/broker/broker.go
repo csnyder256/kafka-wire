@@ -371,11 +371,33 @@ func (b *Broker) DeleteTopic(name string) error {
 	if err := b.persistTopicsLocked(); err != nil {
 		return err
 	}
+	// Forget the topic's archive with its files. A topic created later under
+	// the same name would otherwise inherit the manifest entries: its
+	// segments would never be uploaded, retention would take them for
+	// archived ones, and fetches below its local log would return this
+	// topic's records. The same goes for segments restored into the cache.
+	// The archived objects stay in the store. Every step runs even if an
+	// earlier one fails: the topic is already gone from the metadata, and
+	// files left behind would be picked up by a topic of the same name.
+	var errs []error
+	if b.manifest != nil {
+		if err := b.manifest.ForgetTopic(name); err != nil {
+			errs = append(errs, fmt.Errorf("forgetting the archive of topic %s: %w", name, err))
+		}
+	}
+	if b.cache != nil {
+		if err := b.cache.DropTopic(name); err != nil {
+			errs = append(errs, fmt.Errorf("dropping the restore cache of topic %s: %w", name, err))
+		}
+	}
 	// Best-effort delete of the on-disk topic directory. filepath.Join rather
 	// than concatenation, so the path cannot be built out of a name that
 	// slipped through.
 	dir := filepath.Join(b.cfg.Storage.TopicsDir(), name)
-	return removeAllSafe(dir)
+	if err := removeAllSafe(dir); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 func (b *Broker) persistTopicsLocked() error {

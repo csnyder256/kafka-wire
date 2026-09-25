@@ -260,8 +260,8 @@ func TestArchiveRetentionOrdering(t *testing.T) {
 		"KAFKA_WIRE_ARCHIVE_AGE":            "6h",
 		"KAFKA_WIRE_ARCHIVE_LOCALRETENTION": "1h",
 	})})
-	if err == nil || !strings.Contains(err.Error(), "losing data") {
-		t.Fatalf("localretention below archive age loses data and must be refused, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "must be at least archive.age") {
+		t.Fatalf("localretention below archive age must be refused, got %v", err)
 	}
 }
 

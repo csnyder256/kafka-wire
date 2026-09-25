@@ -18,12 +18,11 @@ import (
 
 // Config tunes the uploader.
 type Config struct {
-	Prefix         string        // e.g. "kafka-wire-archive/"
-	ArchiveAge     time.Duration // sealed segment must be at least this old
-	LocalRetention time.Duration // delete local copy after this once archived
-	PartSize       int64         // multipart part size (default 5 MiB)
-	Tick           time.Duration // sweep interval
-	Concurrency    int           // max parallel uploads
+	Prefix      string        // e.g. "kafka-wire-archive/"
+	ArchiveAge  time.Duration // sealed segment must be at least this old
+	PartSize    int64         // multipart part size (default 5 MiB)
+	Tick        time.Duration // sweep interval
+	Concurrency int           // max parallel uploads
 
 	// HMACKey signs each segment's ownership tuple. Required for
 	// tenant-scoped archives; ignored for legacy shared archives
@@ -161,7 +160,9 @@ func (u *Uploader) sweep(ctx context.Context, provider LogProvider) {
 		if now.Sub(seg.CreatedAt()) < u.cfg.ArchiveAge {
 			continue
 		}
-		// Skip if already archived.
+		// Skip if this position is already archived. Never upload over it: a
+		// local copy that boot recovery truncated would replace the complete
+		// archived one.
 		if _, ok := u.manifest.Lookup(seg.Topic(), seg.Partition(), seg.BaseOffset()); ok {
 			continue
 		}
@@ -193,6 +194,10 @@ func (u *Uploader) uploadOne(ctx context.Context, seg SegmentSource) error {
 		return fmt.Errorf("open segment: %w", err)
 	}
 	defer f.Close()
+	uploaded, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("stat segment: %w", err)
+	}
 
 	// Hash the whole segment first. The digest is stamped into the object
 	// metadata and the manifest, and the restore path refuses any segment
@@ -321,6 +326,15 @@ func (u *Uploader) uploadOne(ctx context.Context, seg SegmentSource) error {
 		return fmt.Errorf("complete multipart upload: %w", err)
 	}
 
+	// The topic may have been deleted while this segment was uploading, and
+	// even recreated: its manifest entries were forgotten then, and a new
+	// segment can sit at the same path. Record the upload only if the file
+	// is still the one that was read.
+	if now, err := os.Stat(seg.LogPath()); err != nil || !os.SameFile(uploaded, now) {
+		_ = u.manifest.AbortPending(key)
+		return fmt.Errorf("segment %s was removed or replaced during upload", seg.LogPath())
+	}
+
 	entry := SegmentEntry{
 		Topic:      seg.Topic(),
 		Partition:  seg.Partition(),
@@ -388,6 +402,17 @@ func (u *Uploader) reconcileOrAbort(ctx context.Context, p *PendingUpload) {
 		return
 	}
 
+	// An object at this key may be someone else's: a deleted topic's
+	// archived segment sits at exactly the key a recreated topic's segment
+	// reuses. Adopt it only if its digest is this upload's.
+	if stored := info.Metadata["sha256"]; p.SHA256 != "" && stored != "" && stored != p.SHA256 {
+		slog.Warn("archive.reconcile.foreign_object", "key", p.S3Key,
+			"want_sha256", p.SHA256, "object_sha256", stored, "action", "dropping the checkpoint; the segment uploads again")
+		if aerr := u.abortStale(ctx, p); aerr != nil {
+			slog.Warn("archive.reconcile.abort_failed", "err", aerr, "key", p.S3Key)
+		}
+		return
+	}
 	sha := p.SHA256
 	if sha == "" {
 		sha = info.Metadata["sha256"]

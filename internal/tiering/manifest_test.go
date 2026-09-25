@@ -2,8 +2,10 @@ package tiering
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -115,5 +117,171 @@ func TestOpenManifest_GarbageFileBoots(t *testing.T) {
 	}
 	if len(m.PendingAll()) != 0 {
 		t.Fatalf("expected 0 pending, got %d", len(m.PendingAll()))
+	}
+}
+
+func TestHoldsWhenTheArchiveCoversTheSegment(t *testing.T) {
+	m, err := OpenManifest(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.AddCompleted(SegmentEntry{Topic: "t", Partition: 0, BaseOffset: 100, NextOffset: 200, SizeBytes: 4096, S3Key: "k"}); err != nil {
+		t.Fatal(err)
+	}
+	if !m.Holds("t", 0, 100, 200, 4096) {
+		t.Error("the archived segment itself must count as held")
+	}
+	// A local copy that boot recovery truncated: the archive has it all.
+	if !m.Holds("t", 0, 100, 180, 3000) {
+		t.Error("a shorter local copy of an archived segment must count as held")
+	}
+	// A local segment reaching past the archived one: a reused topic name.
+	if m.Holds("t", 0, 100, 220, 4096) || m.Holds("t", 0, 100, 200, 5000) {
+		t.Error("a segment the archived entry does not cover must not count as held")
+	}
+	if m.Holds("t", 1, 100, 200, 4096) || m.Holds("u", 0, 100, 200, 4096) {
+		t.Error("another partition or topic must not count as held")
+	}
+}
+
+// A deleted topic's entries used to outlive it. A topic recreated under the
+// same name then inherited them: the uploader skipped its segments as already
+// archived, and fetches below its local log returned the old topic's records.
+func TestForgetTopicDropsItsEntriesDurably(t *testing.T) {
+	dir := t.TempDir()
+	m, err := OpenManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, topic := range []string{"gone", "kept", "gone"} {
+		base := int64(i * 100)
+		if err := m.AddCompleted(SegmentEntry{Topic: topic, BaseOffset: base, NextOffset: base + 100, S3Key: topic + "-done-" + string(rune('a'+i))}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, topic := range []string{"gone", "kept"} {
+		if err := m.SetPending(&PendingUpload{Topic: topic, S3Key: topic + "-pending", UploadID: "u"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.ForgetTopic("gone"); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mm := range []*Manifest{m, reopened} {
+		if got := len(mm.AllForTopic("gone")); got != 0 {
+			t.Errorf("%d entries of the deleted topic remain", got)
+		}
+		if got := len(mm.AllForTopic("kept")); got != 1 {
+			t.Errorf("other topics must keep their entries, got %d", got)
+		}
+		if mm.GetPending("gone-pending") != nil {
+			t.Error("the deleted topic's pending upload must be dropped")
+		}
+		if mm.GetPending("kept-pending") == nil {
+			t.Error("another topic's pending upload must be kept")
+		}
+	}
+}
+
+func TestAddCompletedReplacesTheSamePosition(t *testing.T) {
+	m, err := OpenManifest(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := SegmentEntry{Topic: "t", BaseOffset: 100, NextOffset: 200, SizeBytes: 10, S3Key: "k"}
+	fresh := SegmentEntry{Topic: "t", BaseOffset: 100, NextOffset: 180, SizeBytes: 20, S3Key: "k"}
+	other := SegmentEntry{Topic: "t", BaseOffset: 200, NextOffset: 300, SizeBytes: 30, S3Key: "k2"}
+	for _, e := range []SegmentEntry{stale, other, fresh} {
+		if err := m.AddCompleted(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := len(m.AllForTopic("t")); got != 2 {
+		t.Fatalf("%d entries, want 2: the second upload at offset 100 replaces the first", got)
+	}
+	if !m.Holds("t", 0, 100, 180, 20) || m.Holds("t", 0, 100, 200, 10) {
+		t.Fatal("the manifest must describe the latest upload at offset 100")
+	}
+}
+
+func TestAddCompletedEvictsOverlappingEntries(t *testing.T) {
+	m, err := OpenManifest(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Stale entries from a deleted topic: [0,100) and [100,250).
+	for _, e := range []SegmentEntry{
+		{Topic: "t", BaseOffset: 0, NextOffset: 100, S3Key: "a"},
+		{Topic: "t", BaseOffset: 100, NextOffset: 250, S3Key: "b"},
+		{Topic: "t", Partition: 1, BaseOffset: 0, NextOffset: 500, S3Key: "other"},
+	} {
+		if err := m.AddCompleted(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The recreated topic's first segment, [0,120), overlaps both.
+	if err := m.AddCompleted(SegmentEntry{Topic: "t", BaseOffset: 0, NextOffset: 120, S3Key: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	var p0 []SegmentEntry
+	for _, e := range m.AllForTopic("t") {
+		if e.Partition == 0 {
+			p0 = append(p0, e)
+		}
+	}
+	if len(p0) != 1 || p0[0].NextOffset != 120 {
+		t.Fatalf("partition 0 entries = %+v, want only the new [0,120)", p0)
+	}
+	if _, ok := m.Lookup("t", 1, 0); !ok {
+		t.Fatal("another partition's entry must be kept")
+	}
+}
+
+// Uploads run concurrently and each one checkpoints and records into the
+// manifest. The flushes used to share one temp file (one of two concurrent
+// renames failed, failing that upload) and serialized the pending map outside
+// the lock.
+func TestConcurrentUpdatesAllReachTheDisk(t *testing.T) {
+	dir := t.TempDir()
+	m, err := OpenManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const n = 40
+	errs := make(chan error, 3*n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			key := fmt.Sprintf("k%d", i)
+			p := &PendingUpload{Topic: "t", BaseOffset: int64(i * 10), S3Key: key, UploadID: "u"}
+			errs <- m.SetPending(p)
+			p.Parts = append(p.Parts, PendingUploadPart{PartNumber: 1})
+			errs <- m.SetPending(p)
+			errs <- m.AddCompleted(SegmentEntry{Topic: "t", BaseOffset: int64(i * 10), NextOffset: int64(i*10 + 10), S3Key: key})
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("a concurrent manifest update failed: %v", err)
+		}
+	}
+	reopened, err := OpenManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(reopened.AllForTopic("t")); got != n {
+		t.Fatalf("%d entries on disk, want %d", got, n)
+	}
+	if got := len(reopened.PendingAll()); got != 0 {
+		t.Fatalf("%d pending checkpoints on disk, want 0", got)
 	}
 }

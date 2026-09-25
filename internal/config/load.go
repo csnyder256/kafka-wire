@@ -385,7 +385,7 @@ func (l *Loaded) Validate() error {
 	}
 
 	if c.Archive.Backend != "none" && c.Archive.LocalRetention > 0 && c.Archive.LocalRetention < c.Archive.Age {
-		add("archive.localretention (%s) is shorter than archive.age (%s); local segments would be deleted before they are eligible for upload, losing data",
+		add("archive.localretention (%s) must be at least archive.age (%s): it is not enforced yet, but once it is, local copies would go before they could be uploaded",
 			c.Archive.LocalRetention, c.Archive.Age)
 	}
 
