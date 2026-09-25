@@ -389,3 +389,38 @@ func TestResumeRefusedWhenSegmentChanged(t *testing.T) {
 		t.Errorf("the whole segment should be re-sent; parts=%d want 2", counter.partsSent)
 	}
 }
+
+type segmentList []SegmentSource
+
+func (l segmentList) AllSealedSegments() []SegmentSource { return l }
+
+// A manifest entry at the same base offset used to stop the upload of any
+// segment there, including a different segment of a topic recreated under a
+// deleted one's name. Only an exact match counts as archived now, and the
+// upload replaces the stale entry.
+func TestStaleEntryDoesNotBlockTheUpload(t *testing.T) {
+	seg, _ := writeSegment(t, t.TempDir(), 4096)
+	store, err := objstore.NewFS(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := OpenManifest(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := SegmentEntry{Topic: seg.topic, Partition: seg.partition, BaseOffset: seg.base,
+		NextOffset: seg.next + 50, SizeBytes: seg.size * 2, S3Key: "stale"}
+	if err := m.AddCompleted(stale); err != nil {
+		t.Fatal(err)
+	}
+	u := NewUploader(Config{Prefix: "archive/", PartSize: objstore.MinPartSize}, store, m, nullMetrics{})
+
+	u.sweep(context.Background(), segmentList{seg})
+
+	if !m.Holds(seg.topic, seg.partition, seg.base, seg.next, seg.size) {
+		t.Fatal("the segment was not uploaded over the stale entry")
+	}
+	if got := len(m.AllForTopic(seg.topic)); got != 1 {
+		t.Fatalf("%d entries for the segment's position, want 1", got)
+	}
+}

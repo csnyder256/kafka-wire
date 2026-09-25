@@ -214,7 +214,15 @@ func salvageSegments(raw []byte) []SegmentEntry {
 // AddCompleted records a successful upload + flushes archive.json.
 func (m *Manifest) AddCompleted(e SegmentEntry) error {
 	m.mu.Lock()
-	m.completed = append(m.completed, e)
+	// One entry per segment position: a new upload at the same place
+	// replaces whatever was recorded there before.
+	kept := make([]SegmentEntry, 0, len(m.completed)+1)
+	for _, old := range m.completed {
+		if old.Topic != e.Topic || old.Partition != e.Partition || old.BaseOffset != e.BaseOffset {
+			kept = append(kept, old)
+		}
+	}
+	m.completed = append(kept, e)
 	delete(m.pending, e.S3Key)
 	m.mu.Unlock()
 	return m.flushBoth()

@@ -160,8 +160,11 @@ func (u *Uploader) sweep(ctx context.Context, provider LogProvider) {
 		if now.Sub(seg.CreatedAt()) < u.cfg.ArchiveAge {
 			continue
 		}
-		// Skip if already archived.
-		if _, ok := u.manifest.Lookup(seg.Topic(), seg.Partition(), seg.BaseOffset()); ok {
+		// Skip if this exact segment is already archived. An entry at the
+		// same base offset that does not match (left by a deleted topic whose
+		// name was reused, before deletes forgot the archive) is replaced by
+		// uploading, not trusted.
+		if u.manifest.Holds(seg.Topic(), seg.Partition(), seg.BaseOffset(), seg.NextOffset(), seg.Size()) {
 			continue
 		}
 		wg.Add(1)

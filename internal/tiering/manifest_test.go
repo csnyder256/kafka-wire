@@ -181,3 +181,24 @@ func TestForgetTopicDropsItsEntriesDurably(t *testing.T) {
 		}
 	}
 }
+
+func TestAddCompletedReplacesTheSamePosition(t *testing.T) {
+	m, err := OpenManifest(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := SegmentEntry{Topic: "t", BaseOffset: 100, NextOffset: 200, SizeBytes: 10, S3Key: "k"}
+	fresh := SegmentEntry{Topic: "t", BaseOffset: 100, NextOffset: 180, SizeBytes: 20, S3Key: "k"}
+	other := SegmentEntry{Topic: "t", BaseOffset: 200, NextOffset: 300, SizeBytes: 30, S3Key: "k2"}
+	for _, e := range []SegmentEntry{stale, other, fresh} {
+		if err := m.AddCompleted(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := len(m.AllForTopic("t")); got != 2 {
+		t.Fatalf("%d entries, want 2: the second upload at offset 100 replaces the first", got)
+	}
+	if !m.Holds("t", 0, 100, 180, 20) || m.Holds("t", 0, 100, 200, 10) {
+		t.Fatal("the manifest must describe the latest upload at offset 100")
+	}
+}
