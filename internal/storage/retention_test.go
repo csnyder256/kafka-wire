@@ -110,3 +110,35 @@ func TestSweepIntervalFollowsShortWindows(t *testing.T) {
 		}
 	}
 }
+
+// An idle partition's empty active segment used to roll once it passed
+// segmentage, opening its successor at the same base offset on the same
+// file. The sealed "phantom" never matched its archived copy, so with cold
+// storage on, retention stopped for the partition.
+func TestIdleSegmentDoesNotRollIntoADuplicate(t *testing.T) {
+	s, err := Open(Config{DataDir: t.TempDir(), SegmentMS: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	l, err := s.OpenLog("idle", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	time.Sleep(10 * time.Millisecond) // the empty active segment is past segmentage
+
+	if _, err := l.Append([][]byte{makeBatch(t, 0, 1, 0, time.Now().UnixMilli())}); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(l.AllSegments()); got != 1 {
+		t.Fatalf("%d segments after the first append, want 1: an empty segment must not roll", got)
+	}
+	if _, err := l.Append([][]byte{makeBatch(t, 0, 1, 0, time.Now().UnixMilli())}); err != nil {
+		t.Fatal(err)
+	}
+	segs := l.AllSegments()
+	if len(segs) != 2 || segs[0].BaseOffset() == segs[1].BaseOffset() {
+		t.Fatalf("want two segments with distinct base offsets, got %d", len(segs))
+	}
+}

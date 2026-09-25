@@ -131,9 +131,13 @@ func TestHoldsNeedsAnExactMatch(t *testing.T) {
 	if !m.Holds("t", 0, 100, 200, 4096) {
 		t.Error("the archived segment itself must count as held")
 	}
-	// Same base offset, different segment: a reused topic name, for example.
-	if m.Holds("t", 0, 100, 180, 4096) || m.Holds("t", 0, 100, 200, 4000) {
-		t.Error("an entry whose end offset or size differs must not count as held")
+	// A local copy that boot recovery truncated: the archive has it all.
+	if !m.Holds("t", 0, 100, 180, 3000) {
+		t.Error("a shorter local copy of an archived segment must count as held")
+	}
+	// A local segment reaching past the archived one: a reused topic name.
+	if m.Holds("t", 0, 100, 220, 4096) || m.Holds("t", 0, 100, 200, 5000) {
+		t.Error("a segment the archived entry does not cover must not count as held")
 	}
 	if m.Holds("t", 1, 100, 200, 4096) || m.Holds("u", 0, 100, 200, 4096) {
 		t.Error("another partition or topic must not count as held")

@@ -293,13 +293,15 @@ func (m *Manifest) Lookup(topic string, partition int32, baseOffset int64) (Segm
 	return SegmentEntry{}, false
 }
 
-// Holds reports whether the archive holds exactly this segment: an entry at
-// the same (topic, partition, baseOffset) with the same end offset and size.
-// A stale entry, say from a deleted topic whose name was reused, must not
-// vouch for a different segment that happens to share a base offset.
+// Holds reports whether the archive holds at least this segment's records:
+// an entry at the same (topic, partition, baseOffset) whose end offset and
+// size are no smaller than the local copy's. A local copy that extends past
+// the archived one (a stale entry, say, from a deleted topic whose name was
+// reused) is not held. One that boot recovery truncated is: the complete
+// copy is in the archive.
 func (m *Manifest) Holds(topic string, partition int32, baseOffset, nextOffset, sizeBytes int64) bool {
 	e, ok := m.Lookup(topic, partition, baseOffset)
-	return ok && e.NextOffset == nextOffset && e.SizeBytes == sizeBytes
+	return ok && e.NextOffset >= nextOffset && e.SizeBytes >= sizeBytes
 }
 
 // ForgetTopic drops every completed and pending entry for a deleted topic,
