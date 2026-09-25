@@ -1,12 +1,17 @@
 # Multi-arch, static, distroless. Built with:
 #   docker buildx build --platform linux/amd64,linux/arm64 -t kafka-wire .
-ARG GO_VERSION=1.26
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT=none
+
+# The golang images set GOTOOLCHAIN=local, which ignores the toolchain line
+# in go.mod and builds with whatever 1.26.x the base image carries. auto lets
+# go.mod decide, as it does for CI and the release binaries: an older base
+# image first downloads the pinned, checksum-verified toolchain.
+ENV GOTOOLCHAIN=auto
 
 WORKDIR /src
 # Dependencies first so a source-only change does not re-download the module
