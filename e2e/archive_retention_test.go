@@ -219,3 +219,82 @@ func TestRetentionDeletesArchivedSegments(t *testing.T) {
 		t.Fatalf("%d of %d segments are still on local disk although they were archived and are past retentionage", after, before)
 	}
 }
+
+func deleteTopic(t *testing.T, admin *kgo.Client, topic string) {
+	t.Helper()
+	resp, err := kadm.NewClient(admin).DeleteTopics(context.Background(), topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range resp {
+		if r.Err != nil {
+			t.Fatalf("deleting %s: %v", topic, r.Err)
+		}
+	}
+}
+
+// consumeFromOffset reads up to n records of partition 0 starting at an exact
+// offset, so reads below the local log go through the archive.
+func consumeFromOffset(t *testing.T, addr, topic string, from int64, n int) [][]byte {
+	t.Helper()
+	c := newClient(t, addr, kgo.ConsumePartitions(map[string]map[int32]kgo.Offset{topic: {0: kgo.NewOffset().At(from)}}))
+	var values [][]byte
+	deadline := time.Now().Add(60 * time.Second)
+	for len(values) < n && time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		f := c.PollFetches(ctx)
+		cancel()
+		f.EachRecord(func(r *kgo.Record) { values = append(values, r.Value) })
+	}
+	return values
+}
+
+// Restored segments are cached by topic, partition and offset. A deleted
+// topic's cache used to survive it, and the recreated topic was served the
+// old topic's records from it.
+func TestRecreatedTopicNeverReadsTheDeletedOnesCache(t *testing.T) {
+	archiveDir, dataDir := t.TempDir(), t.TempDir()
+	b := startBroker(t,
+		"KAFKA_WIRE_STORAGE_DATADIR="+dataDir,
+		"KAFKA_WIRE_ARCHIVE_BACKEND=fs",
+		"KAFKA_WIRE_ARCHIVE_FS_PATH="+archiveDir,
+		"KAFKA_WIRE_STORAGE_SEGMENTBYTES=8KiB",
+		"KAFKA_WIRE_ARCHIVE_AGE=1s",
+		"KAFKA_WIRE_STORAGE_RETENTIONAGE=3s",
+	)
+	const topic = "archive.cached"
+	admin := newClient(t, b.addr)
+	onlyActiveSegmentLeft := func() {
+		t.Helper()
+		deadline := time.Now().Add(150 * time.Second)
+		for localSegmentCount(dataDir, topic) > 1 {
+			if time.Now().After(deadline) {
+				t.Fatal("the archived segments were never removed locally")
+			}
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	createTopic(t, admin, topic, 1)
+	produceRecords(t, b.addr, topic, 200, "OLD")
+	onlyActiveSegmentLeft()
+	// Offset 0 is no longer local: it is restored from the archive, into the cache.
+	if old := consumeFromOffset(t, b.addr, topic, 0, 50); len(old) == 0 || !bytes.HasPrefix(old[0], []byte("OLD")) {
+		t.Fatalf("setup: could not read the first topic back from the archive (%d records)", len(old))
+	}
+
+	deleteTopic(t, admin, topic)
+	createTopic(t, admin, topic, 1)
+	produceRecords(t, b.addr, topic, 200, "NEW")
+	onlyActiveSegmentLeft()
+
+	values := consumeFromOffset(t, b.addr, topic, 0, 50)
+	if len(values) == 0 {
+		t.Fatal("read nothing back from the recreated topic's archive")
+	}
+	for i, v := range values {
+		if !bytes.HasPrefix(v, []byte("NEW")) {
+			t.Fatalf("record %d came from the deleted topic", i)
+		}
+	}
+}

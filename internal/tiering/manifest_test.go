@@ -202,3 +202,36 @@ func TestAddCompletedReplacesTheSamePosition(t *testing.T) {
 		t.Fatal("the manifest must describe the latest upload at offset 100")
 	}
 }
+
+func TestAddCompletedEvictsOverlappingEntries(t *testing.T) {
+	m, err := OpenManifest(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Stale entries from a deleted topic: [0,100) and [100,250).
+	for _, e := range []SegmentEntry{
+		{Topic: "t", BaseOffset: 0, NextOffset: 100, S3Key: "a"},
+		{Topic: "t", BaseOffset: 100, NextOffset: 250, S3Key: "b"},
+		{Topic: "t", Partition: 1, BaseOffset: 0, NextOffset: 500, S3Key: "other"},
+	} {
+		if err := m.AddCompleted(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The recreated topic's first segment, [0,120), overlaps both.
+	if err := m.AddCompleted(SegmentEntry{Topic: "t", BaseOffset: 0, NextOffset: 120, S3Key: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	var p0 []SegmentEntry
+	for _, e := range m.AllForTopic("t") {
+		if e.Partition == 0 {
+			p0 = append(p0, e)
+		}
+	}
+	if len(p0) != 1 || p0[0].NextOffset != 120 {
+		t.Fatalf("partition 0 entries = %+v, want only the new [0,120)", p0)
+	}
+	if _, ok := m.Lookup("t", 1, 0); !ok {
+		t.Fatal("another partition's entry must be kept")
+	}
+}

@@ -195,6 +195,10 @@ func (u *Uploader) uploadOne(ctx context.Context, seg SegmentSource) error {
 		return fmt.Errorf("open segment: %w", err)
 	}
 	defer f.Close()
+	uploaded, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("stat segment: %w", err)
+	}
 
 	// Hash the whole segment first. The digest is stamped into the object
 	// metadata and the manifest, and the restore path refuses any segment
@@ -323,12 +327,13 @@ func (u *Uploader) uploadOne(ctx context.Context, seg SegmentSource) error {
 		return fmt.Errorf("complete multipart upload: %w", err)
 	}
 
-	// The topic may have been deleted while this segment was uploading. Its
-	// manifest entries were forgotten then, and recording this one would
-	// make a recreated topic's segment at the same offsets look archived.
-	if _, err := os.Stat(seg.LogPath()); err != nil {
+	// The topic may have been deleted while this segment was uploading, and
+	// even recreated: its manifest entries were forgotten then, and a new
+	// segment can sit at the same path. Record the upload only if the file
+	// is still the one that was read.
+	if now, err := os.Stat(seg.LogPath()); err != nil || !os.SameFile(uploaded, now) {
 		_ = u.manifest.AbortPending(key)
-		return fmt.Errorf("segment removed during upload: %w", err)
+		return fmt.Errorf("segment %s was removed or replaced during upload", seg.LogPath())
 	}
 
 	entry := SegmentEntry{
@@ -398,6 +403,17 @@ func (u *Uploader) reconcileOrAbort(ctx context.Context, p *PendingUpload) {
 		return
 	}
 
+	// An object at this key may be someone else's: a deleted topic's
+	// archived segment sits at exactly the key a recreated topic's segment
+	// reuses. Adopt it only if its digest is this upload's.
+	if stored := info.Metadata["sha256"]; p.SHA256 != "" && stored != "" && stored != p.SHA256 {
+		slog.Warn("archive.reconcile.foreign_object", "key", p.S3Key,
+			"want_sha256", p.SHA256, "object_sha256", stored, "action", "dropping the checkpoint; the segment uploads again")
+		if aerr := u.abortStale(ctx, p); aerr != nil {
+			slog.Warn("archive.reconcile.abort_failed", "err", aerr, "key", p.S3Key)
+		}
+		return
+	}
 	sha := p.SHA256
 	if sha == "" {
 		sha = info.Metadata["sha256"]
