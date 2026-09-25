@@ -18,12 +18,11 @@ import (
 
 // Config tunes the uploader.
 type Config struct {
-	Prefix         string        // e.g. "kafka-wire-archive/"
-	ArchiveAge     time.Duration // sealed segment must be at least this old
-	LocalRetention time.Duration // delete local copy after this once archived
-	PartSize       int64         // multipart part size (default 5 MiB)
-	Tick           time.Duration // sweep interval
-	Concurrency    int           // max parallel uploads
+	Prefix      string        // e.g. "kafka-wire-archive/"
+	ArchiveAge  time.Duration // sealed segment must be at least this old
+	PartSize    int64         // multipart part size (default 5 MiB)
+	Tick        time.Duration // sweep interval
+	Concurrency int           // max parallel uploads
 
 	// HMACKey signs each segment's ownership tuple. Required for
 	// tenant-scoped archives; ignored for legacy shared archives

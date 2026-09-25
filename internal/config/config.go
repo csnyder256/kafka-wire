@@ -76,8 +76,8 @@ type StorageConfig struct {
 	SegmentBytes  int64         `yaml:"segmentbytes" def:"1GiB" doc:"roll to a new log segment once the active one exceeds this size"`
 	SegmentAge    time.Duration `yaml:"segmentage" def:"168h" doc:"roll to a new log segment once the active one is this old, even if it is not full"`
 	IndexInterval int64         `yaml:"indexinterval" def:"16KiB" doc:"add a sparse index entry every this many bytes of log. Lower means faster lookups and bigger indexes"`
-	RetentionAge  time.Duration `yaml:"retentionage" def:"168h" doc:"delete log segments older than this. 0 disables age-based retention"`
-	RetentionSize int64         `yaml:"retentionsize" def:"-1" doc:"delete oldest segments once a partition exceeds this many bytes. -1 means unlimited"`
+	RetentionAge  time.Duration `yaml:"retentionage" def:"168h" doc:"delete log segments older than this. 0 disables age-based retention. With cold storage on, a segment is only deleted once it is archived"`
+	RetentionSize int64         `yaml:"retentionsize" def:"-1" doc:"delete oldest segments once a partition exceeds this many bytes. -1 means unlimited. With cold storage on, a segment is only deleted once it is archived"`
 	FsyncMode     string        `yaml:"fsyncmode" def:"interval" doc:"durability policy: none (fastest, relies on the OS), interval (fsync on a timer), always (fsync every append, slowest and safest)"`
 	FsyncInterval time.Duration `yaml:"fsyncinterval" def:"5s" doc:"how often to fsync when storage.fsyncmode is interval"`
 	DiskFreeMin   float64       `yaml:"diskfreemin" def:"0.10" doc:"pause writes when the fraction of free disk space drops below this. 0 disables the guard"`
@@ -87,7 +87,7 @@ type ArchiveConfig struct {
 	Backend        string        `yaml:"backend" def:"none" doc:"cold storage tier: none, fs, or s3. s3 covers AWS plus every S3-compatible store"`
 	Prefix         string        `yaml:"prefix" def:"kafka-wire/" doc:"key prefix for archived segments. Lets several brokers share one bucket"`
 	Age            time.Duration `yaml:"age" def:"1h" doc:"a sealed segment becomes eligible for upload once it is this old"`
-	LocalRetention time.Duration `yaml:"localretention" def:"24h" doc:"delete the local copy of an archived segment after this long. Its indexes are kept"`
+	LocalRetention time.Duration `yaml:"localretention" def:"24h" doc:"delete the local copy of an archived segment once it is this old. Reads below the local log are served from the archive"`
 	Concurrency    int           `yaml:"concurrency" def:"2" doc:"how many segment uploads may run at once. Multiply by archive.s3.partsize to budget memory"`
 	CacheBytes     int64         `yaml:"cachebytes" def:"2GiB" doc:"size of the on-disk LRU cache holding segments restored from cold storage"`
 

@@ -66,11 +66,11 @@ STORAGE
     env: KAFKA_WIRE_STORAGE_INDEXINTERVAL
 
   storage.retentionage  (duration, default 168h)
-    delete log segments older than this. 0 disables age-based retention
+    delete log segments older than this. 0 disables age-based retention. With cold storage on, a segment is only deleted once it is archived
     env: KAFKA_WIRE_STORAGE_RETENTIONAGE
 
   storage.retentionsize  (size, default -1)
-    delete oldest segments once a partition exceeds this many bytes. -1 means unlimited
+    delete oldest segments once a partition exceeds this many bytes. -1 means unlimited. With cold storage on, a segment is only deleted once it is archived
     env: KAFKA_WIRE_STORAGE_RETENTIONSIZE
 
   storage.fsyncmode  (string, default interval)
@@ -101,7 +101,7 @@ ARCHIVE
     env: KAFKA_WIRE_ARCHIVE_AGE
 
   archive.localretention  (duration, default 24h)
-    delete the local copy of an archived segment after this long. Its indexes are kept
+    delete the local copy of an archived segment once it is this old. Reads below the local log are served from the archive
     env: KAFKA_WIRE_ARCHIVE_LOCALRETENTION
 
   archive.concurrency  (size, default 2)
