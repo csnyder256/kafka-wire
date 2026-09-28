@@ -87,9 +87,38 @@ const (
 	CompressionZstd     = 4
 )
 
+// The remaining batch attribute bits carry claims about the records that the
+// broker has to be able to honor. Two of them are claims this broker cannot
+// keep, because it has no transaction coordinator at all.
+const (
+	// AttrTimestampType: bit 3. Set means the timestamps are log-append
+	// time the broker assigned, not create time the producer supplied.
+	AttrTimestampType = 0x08
+
+	// AttrTransactional: bit 4. The batch belongs to a transaction, so a
+	// read_committed consumer must only see it once that transaction has
+	// committed, and must never see it if the transaction aborted.
+	AttrTransactional = 0x10
+
+	// AttrControlBatch: bit 5. The batch is not client data at all; it is a
+	// transaction marker (COMMIT or ABORT) for a transaction.
+	AttrControlBatch = 0x20
+)
+
 // Compression returns the codec used by this batch.
 func (h BatchHeader) Compression() int8 {
 	return int8(h.Attributes & AttrCompressionMask)
+}
+
+// IsTransactional reports whether the batch claims membership in a transaction.
+func (h BatchHeader) IsTransactional() bool {
+	return h.Attributes&AttrTransactional != 0
+}
+
+// IsControlBatch reports whether the batch is a transaction marker rather than
+// client data.
+func (h BatchHeader) IsControlBatch() bool {
+	return h.Attributes&AttrControlBatch != 0
 }
 
 // ParseBatchHeader decodes the v2 header from buf. buf must contain

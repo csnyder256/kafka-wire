@@ -120,6 +120,21 @@ What you give up is producer-side deduplication of retries. It is not emulated,
 because a broker that accepted `InitProducerId` and then ignored sequence
 numbers would be claiming a guarantee it does not provide.
 
+The same honesty applies to the records themselves. A v2 record batch carries
+attribute bits that claim membership in a transaction and mark a batch as a
+transaction control marker. kafka-wire refuses a batch that sets either bit,
+with `CORRUPT_MESSAGE` and a message naming the bit, because it cannot commit or
+abort a transaction:
+
+- A transactional batch that was stored as ordinary data would be counted in the
+  high watermark and reported to a `read_committed` consumer as committed and
+  stable (`lastStableOffset` equal to the high watermark, no aborted
+  transactions) — so an abort after the fact could not take it back.
+- A control batch is a `COMMIT`/`ABORT` marker rather than data; storing one
+  would index it and hand it to consumers as a record.
+
+Ordinary nontransactional producers remain supported. Transactional producers and control batches are rejected because this broker does not implement the coordinator and visibility semantics they require. This rejection does not retroactively establish transaction correctness for older persisted batches.
+
 | Client | Works | Note |
 |---|---|---|
 | `kcat` / kafkacat | yes | |

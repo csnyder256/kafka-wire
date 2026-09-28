@@ -284,13 +284,21 @@ func (l *Log) Append(batches [][]byte) (firstOffset int64, err error) {
 	}
 
 	startOffset := active.NextOffset()
+
+	// Validate the whole request before writing any of it. A Produce response
+	// reports one error code per partition, so a client that sees a failure
+	// there believes nothing from that request landed; if an earlier batch had
+	// already been appended, that belief would be wrong and the client's retry
+	// would duplicate it. Checking every batch up front makes the per-partition
+	// answer honest for all the rejection reasons the segment enforces (size,
+	// magic, CRC, codec, transaction attribute bits).
 	for i, batch := range batches {
-		if len(batch) < MinBatchSize {
-			return 0, fmt.Errorf("batch %d too small (%d bytes)", i, len(batch))
+		if err := ValidateBatchForAppend(batch); err != nil {
+			return 0, fmt.Errorf("batch %d: %w", i, err)
 		}
-		if len(batch) > MaxBatchSize {
-			return 0, fmt.Errorf("batch %d too large (%d bytes)", i, len(batch))
-		}
+	}
+
+	for i, batch := range batches {
 		// Rewrite BaseOffset to the active partition offset.
 		// CRC is over Attributes-onward, so this rewrite does NOT
 		// invalidate it (Kafka design: see record.go).
