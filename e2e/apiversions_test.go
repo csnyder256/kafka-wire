@@ -36,16 +36,25 @@ const (
 
 type versionRange struct{ min, max int16 }
 
-// TestUnimplementedAPIsAreNotAdvertised is the first regression this file
-// exists for.
+// TestUnimplementedAPIsAreNotAdvertised is a CONTROL, not a repair: it locks
+// in behaviour that already worked.
+//
+// The claim worth recording honestly: this test and the three below it were
+// added in the same branch as the transaction-batch change, and none of them
+// fixed anything. The ApiVersions advertisement already omitted the APIs that
+// have no handler, and the dispatch switch already answered them -- they were
+// true on the branch's base commit, and this branch's substantive behaviour
+// change is the record-batch validation in internal/storage (a batch that
+// claims a transaction this broker cannot honor is refused, atomically).
+// These tests exist so the ApiVersions side of the contract cannot silently
+// drift while the storage side changes, which is a real risk when the two are
+// touched in one branch -- but "pinned" is not "fixed", and this comment says
+// which one it is.
 //
 // kafka-wire implements no transaction coordinator, so InitProducerId has no
-// handler: dispatch.go's switch falls through to writeUnsupported. ApiVersions
-// listed it anyway, so a client that read the advertisement -- the entire
-// purpose of the advertisement -- sent a request the broker had just declared
-// supported and got UNSUPPORTED_VERSION back. The README documents the real
-// contract: unimplemented APIs are absent from the table, and an unadvertised
-// API gets a typed UNSUPPORTED_VERSION response.
+// handler: dispatch.go's switch falls through to writeUnsupported. The README
+// documents the contract: unimplemented APIs are absent from the table, and an
+// unadvertised API gets a typed UNSUPPORTED_VERSION response.
 func TestUnimplementedAPIsAreNotAdvertised(t *testing.T) {
 	b := startBroker(t)
 	adv := probeAPIVersions(t, b.addr)
@@ -76,8 +85,8 @@ func TestUnimplementedAPIsAreNotAdvertised(t *testing.T) {
 	t.Logf("advertised %d APIs, all of them implemented", len(adv))
 }
 
-// TestUnsupportedAPIFailsAsItsOwnResponseType pins the other half of that
-// contract, which writeUnsupported already implements: an API the broker does
+// TestUnsupportedAPIFailsAsItsOwnResponseType is the control for the other half
+// of that contract, which writeUnsupported already implemented: an API the broker does
 // not advertise still answers with a response shaped like the request, carrying
 // UNSUPPORTED_VERSION. A client that sent InitProducerId decodes the next frame
 // as an InitProducerIdResponse whatever the broker meant to send, so a
@@ -103,10 +112,12 @@ func TestUnsupportedAPIFailsAsItsOwnResponseType(t *testing.T) {
 	t.Log("InitProducerId answers with UNSUPPORTED_VERSION at v0, v1, v2 and v4")
 }
 
-// TestHighProduceVersionIsSupported drives Produce at the top of its advertised
-// range with a real record batch. Advertising a version the handler only half
-// implements is worse than not advertising it, because the client has no
-// fallback left; this proves the ceiling the broker publishes is one it serves.
+// TestHighProduceVersionIsSupported is a control on the advertised ceiling: it
+// drives Produce at the top of its advertised range with a real record batch,
+// which already worked before this branch. Advertising a version the handler
+// only half implements is worse than not advertising it, because the client has
+// no fallback left, so the published ceiling is worth a standing check -- but
+// this check found nothing to repair.
 func TestHighProduceVersionIsSupported(t *testing.T) {
 	b := startBroker(t)
 	adv := probeAPIVersions(t, b.addr)
@@ -147,7 +158,7 @@ func TestHighProduceVersionIsSupported(t *testing.T) {
 	t.Logf("Produce v%d accepted a real batch and the record round-tripped", pr.max)
 }
 
-// TestHighFetchVersionIsSupported does the same for Fetch. Fetch is advertised
+// TestHighFetchVersionIsSupported is Fetch's half of that control. Fetch is advertised
 // v4-v11; v11 is the version that is flexible on the request header, so if the
 // header parsing were wrong the fetch would fail to decode rather than return
 // stale data -- which is the quiet version of this bug.
@@ -289,8 +300,13 @@ func probeAPIVersions(t *testing.T, addr string) map[int16]versionRange {
 
 // produceRaw builds a Produce request at the given version carrying one
 // uncompressed record batch, and returns an error if the partition reported a
-// non-zero error code. The batch layout depends on the version, which is the
-// whole point of the test: v9 moved the CRC from CRC-32C to CRC-32.
+// non-zero error code. The batch layout here does NOT depend on the version:
+// the v2 record batch is CRC-32C for every Produce version, and v9 only added
+// flexible (tagged) framing around the request. That is what this helper
+// exists to pin -- a hand-built v9 request that changed the batch itself would
+// fail against a broker that follows the format. (An earlier revision of this
+// comment claimed v9 moved the CRC to CRC-32. The code below has always used
+// CRC-32C, as does internal/storage.)
 func produceRawAtVersion(t *testing.T, addr, topic string, version int16, value []byte) error {
 	t.Helper()
 	if version < 3 {
