@@ -17,15 +17,10 @@ import (
 // the bytes that actually leave the broker. That distinction is the point:
 // a struct built by hand in a test proves what kmsg does with a
 // correctly-shaped struct, not what handleFindCoordinator/handleOffsetFetch
-// actually send. Both defects below live in how the handler fills the
-// version-dependent fields, so the test must go through the handler to see
-// them at all.
-//
-// The shared failure mode: a protocol field whose Go zero value is a
-// legal-looking wrong answer, on a path where the encoder writes the field
-// unconditionally. Neither mistake breaks the connection, which is exactly
-// why they survive: the response decodes, the client acts on it, and the
-// symptom shows up somewhere unrelated.
+// actually send. OffsetFetch had a real defect: an uncommitted partition's
+// Go zero-value leader epoch looked like a valid epoch on the wire.
+// FindCoordinator already handled the version-dependent coordinator shapes
+// correctly; those cases pin existing behavior rather than prove a new fix.
 
 // testDispatcher builds a real Dispatcher over an in-memory broker. The
 // broker owns an OffsetStore rooted at t.TempDir(), so tests can commit
