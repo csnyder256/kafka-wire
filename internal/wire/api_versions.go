@@ -28,6 +28,12 @@ import (
 //   DescribeConfigs v0-v4
 //   DescribeGroups  v0-v5
 //   ListGroups      v0-v4
+//
+// This list and the switch in dispatch.go are the same set of keys, and they
+// have to stay that way. An API that is advertised but not routed falls through
+// to writeUnsupported, so the broker tells a client it may send a request and
+// then refuses it. Anything without a handler belongs in the README's
+// "not implemented" list, not here.
 
 type apiVersionRange struct {
 	APIKey     int16

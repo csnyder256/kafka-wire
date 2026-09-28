@@ -44,6 +44,66 @@ func ValidateCompressionCodec(attributes int16) error {
 	return fmt.Errorf("unsupported compression codec %d", codec)
 }
 
+// ValidateBatchAttributes rejects batches whose attribute bits claim a
+// transaction guarantee this broker cannot provide.
+//
+// kafka-wire has no transaction coordinator: InitProducerId is not advertised
+// and not implemented. That means the two transaction attribute bits can never
+// be true here, and accepting a batch that sets them is not pass-through
+// neutrality, it is a lie with a delayed consequence:
+//
+//   - AttrTransactional: the producer believes the records are uncommitted until
+//     it commits the transaction. The broker stores them as ordinary data, counts
+//     them in the high watermark, and reports LastStableOffset == high watermark
+//     with an empty aborted-transaction list, so a read_committed consumer is
+//     told these records are committed and stable. If the producer then aborts,
+//     the consumer has already been handed the aborted records.
+//
+//   - AttrControlBatch: the batch is a COMMIT/ABORT marker, not client data. The
+//     broker would index it, count it in offsets, and hand it to consumers as a
+//     record.
+//
+// Refusing is the honest outcome, and it cannot affect a legitimate client:
+// both bits require a transaction coordinator to have issued a producer id, and
+// that path already fails at InitProducerId. The error names the bit so the
+// operator does not have to guess which one.
+func ValidateBatchAttributes(attributes int16) error {
+	if err := ValidateCompressionCodec(attributes); err != nil {
+		return err
+	}
+	if attributes&AttrControlBatch != 0 {
+		return errors.New("batch is a transaction control marker (attribute bit 5); " +
+			"kafka-wire has no transaction coordinator, so it cannot store transaction markers")
+	}
+	if attributes&AttrTransactional != 0 {
+		return errors.New("batch claims membership in a transaction (attribute bit 4); " +
+			"kafka-wire has no transaction coordinator, so it cannot honor a transaction's commit or abort")
+	}
+	return nil
+}
+
+// ValidateBatchForAppend applies every check the storage layer makes before a
+// batch may be written: the size bounds, the v2 header itself, the CRC, and the
+// attribute bits. Segment.Append re-runs these as its own guard; Log.Append
+// calls this for every batch in a request up front so a rejection never leaves
+// an earlier batch of the same request on disk.
+func ValidateBatchForAppend(batch []byte) error {
+	if len(batch) < MinBatchSize {
+		return fmt.Errorf("too small (%d bytes, minimum %d)", len(batch), MinBatchSize)
+	}
+	if len(batch) > MaxBatchSize {
+		return fmt.Errorf("too large (%d bytes, maximum %d)", len(batch), MaxBatchSize)
+	}
+	h, err := ParseBatchHeader(batch)
+	if err != nil {
+		return fmt.Errorf("parse batch header: %w", err)
+	}
+	if err := ValidateCRC(batch); err != nil {
+		return err
+	}
+	return ValidateBatchAttributes(h.Attributes)
+}
+
 // Decompress unpacks a compressed records blob from inside a v2
 // batch. Provided for completeness; nothing calls it today.
 //

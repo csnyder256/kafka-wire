@@ -257,8 +257,12 @@ func (s *Segment) Append(batch []byte) (firstOffset, lastOffset, position int64,
 	if err := ValidateCRC(batch); err != nil {
 		return 0, 0, 0, fmt.Errorf("validate CRC: %w", err)
 	}
-	if err := ValidateCompressionCodec(h.Attributes); err != nil {
-		return 0, 0, 0, fmt.Errorf("validate codec: %w", err)
+	// ValidateBatchAttributes is the gate: it rejects an unknown codec (a
+	// producer can otherwise claim a codec that does not exist and consumers
+	// get corrupt data behind a misleading error) and the transaction
+	// attribute bits, which this broker has no coordinator to honor.
+	if err := ValidateBatchAttributes(h.Attributes); err != nil {
+		return 0, 0, 0, fmt.Errorf("validate attributes: %w", err)
 	}
 	pos := s.logSize
 	if _, err := s.logFile.Write(batch); err != nil {
