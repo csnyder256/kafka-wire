@@ -133,9 +133,7 @@ abort a transaction:
 - A control batch is a `COMMIT`/`ABORT` marker rather than data; storing one
   would index it and hand it to consumers as a record.
 
-No legitimate client is affected, because reaching either bit requires a
-transaction coordinator to have issued a producer id, and that path already
-fails at `InitProducerId`.
+Ordinary nontransactional producers remain supported. Transactional producers and control batches are rejected because this broker does not implement the coordinator and visibility semantics they require. This rejection does not retroactively establish transaction correctness for older persisted batches.
 
 | Client | Works | Note |
 |---|---|---|
