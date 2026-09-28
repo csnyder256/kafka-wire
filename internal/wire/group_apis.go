@@ -32,10 +32,15 @@ func (d *Dispatcher) handleFindCoordinator(state *connState, hdr RequestHeader, 
 	resp.Host = d.brk.AdvertisedHost()
 	resp.Port = d.brk.AdvertisedPort()
 	resp.ErrorCode = errCodeNone
-	// v4+ supports CoordinatorKeys[] (multi-key batch). For brevity
-	// we only handle the single-coordinator-key case (key on the
-	// request itself); the few v4+ clients in our compat target
-	// (none) tolerate this.
+	// The response carries two shapes and the encoder writes exactly one:
+	// the top-level NodeID/Host/Port/ErrorCode exist only on v0-v3, and the
+	// per-key Coordinators list only from v4. Fill the list from whatever the
+	// client asked about. v4+ clients do not send CoordinatorKey at all (the
+	// field is v0-v3 on the wire), so on v4+ the request's key list is the
+	// only source; the pre-v4 top-level fields above carry the answer for the
+	// older versions. Both are populated unconditionally and the encoder
+	// drops the half that does not belong to the negotiated version, which
+	// keeps this correct without branching on the version here.
 	for _, key := range req.CoordinatorKeys {
 		resp.Coordinators = append(resp.Coordinators, kmsg.FindCoordinatorResponseCoordinator{
 			Key:       key,
