@@ -3,6 +3,7 @@ package wire
 import (
 	"sort"
 
+	"github.com/csnyder256/kafka-wire/internal/broker"
 	"github.com/twmb/franz-go/pkg/kmsg"
 )
 
@@ -74,6 +75,28 @@ func (d *Dispatcher) handleOffsetCommit(state *connState, hdr RequestHeader, bod
 	return d.writeKmsgResponse(state, hdr, resp, req.IsFlexible())
 }
 
+// offsetLeaderEpoch picks the leader epoch to report for a committed-offset
+// lookup, following the protocol's "unknown" convention.
+//
+// OffsetFetch v5+ writes LeaderEpoch unconditionally, and kmsg's own Default()
+// seeds it to -1 for exactly one reason: a partition with no commit recorded
+// must not report a real-looking epoch. The handler builds its partitions with
+// a bare struct literal and never calls Default(), so for a missing commit the
+// store's zero value (0) would be written instead, and a consumer resuming
+// from that tuple would start at the right offset carrying a leader epoch that
+// was never committed.
+//
+// The store reports "no commit recorded" as offset -1 (see
+// OffsetStore.FetchOffset); a real committed offset is never negative, so that
+// is the test. Real commits keep whatever epoch the client committed, including
+// 0, which is accurate on a single-node broker.
+func offsetLeaderEpoch(co broker.CommittedOffset) int32 {
+	if co.Offset < 0 {
+		return -1
+	}
+	return co.LeaderEpoch
+}
+
 // OffsetFetch: return committed offsets for the requested
 // (topic, partition) tuples. If the request omits Topics entirely,
 // return ALL topics committed by the group.
@@ -109,7 +132,7 @@ func (d *Dispatcher) handleOffsetFetch(state *connState, hdr RequestHeader, body
 					if co.Metadata != "" {
 						rp.Metadata = stringPtr(co.Metadata)
 					}
-					rp.LeaderEpoch = co.LeaderEpoch
+					rp.LeaderEpoch = offsetLeaderEpoch(co)
 					rt.Partitions = append(rt.Partitions, rp)
 				}
 				rg.Topics = append(rg.Topics, rt)
@@ -136,7 +159,7 @@ func (d *Dispatcher) handleOffsetFetch(state *connState, hdr RequestHeader, body
 				rp := kmsg.OffsetFetchResponseTopicPartition{
 					Partition:   p,
 					Offset:      co.Offset,
-					LeaderEpoch: co.LeaderEpoch,
+					LeaderEpoch: offsetLeaderEpoch(co),
 				}
 				if co.Metadata != "" {
 					rp.Metadata = stringPtr(co.Metadata)
@@ -161,7 +184,7 @@ func (d *Dispatcher) handleOffsetFetch(state *connState, hdr RequestHeader, body
 			if co.Metadata != "" {
 				rp.Metadata = stringPtr(co.Metadata)
 			}
-			rp.LeaderEpoch = co.LeaderEpoch
+			rp.LeaderEpoch = offsetLeaderEpoch(co)
 			rt.Partitions = append(rt.Partitions, rp)
 		}
 		resp.Topics = append(resp.Topics, rt)
