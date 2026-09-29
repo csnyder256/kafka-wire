@@ -47,26 +47,23 @@ func (d *Dispatcher) handleProduce(state *connState, hdr RequestHeader, body []b
 		// principal.tenant_id at append time).
 		if acl != nil && !acl.AuthorizeTopic(state.saslPrincipal, topicReq.Topic, "write") {
 			for _, partReq := range topicReq.Partitions {
-				respTopic.Partitions = append(respTopic.Partitions, kmsg.ProduceResponseTopicPartition{
-					Partition:    partReq.Partition,
-					ErrorCode:    errCodeTopicAuthorizationFailed,
-					BaseOffset:   -1,
-					ErrorMessage: stringPtr("principal lacks write ACL"),
-				})
+				partResp := kmsg.NewProduceResponseTopicPartition()
+				partResp.Partition = partReq.Partition
+				partResp.ErrorCode = errCodeTopicAuthorizationFailed
+				partResp.BaseOffset = -1
+				partResp.ErrorMessage = stringPtr("principal lacks write ACL")
+				respTopic.Partitions = append(respTopic.Partitions, partResp)
 			}
 			resp.Topics = append(resp.Topics, respTopic)
 			continue
 		}
 
 		for _, partReq := range topicReq.Partitions {
-			partResp := kmsg.ProduceResponseTopicPartition{
-				Partition: partReq.Partition,
-				// -1 means "the broker did not overwrite your timestamp".
-				// The Go zero value 0 is a real timestamp (1970-01-01), and
-				// clients that read it hand that back as the record's
-				// timestamp instead of the one the producer set.
-				LogAppendTime: -1,
-			}
+			// Seed protocol defaults, including the v10+ CurrentLeader tag.
+			// Zero values would emit that unsupported tag even at v9, which
+			// Java clients reject after the records have already been appended.
+			partResp := kmsg.NewProduceResponseTopicPartition()
+			partResp.Partition = partReq.Partition
 
 			if len(partReq.Records) == 0 {
 				partResp.ErrorCode = errCodeCorruptMessage

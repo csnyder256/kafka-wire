@@ -26,6 +26,9 @@ func (d *Dispatcher) handleCreateTopics(state *connState, hdr RequestHeader, bod
 	for _, t := range req.Topics {
 		rt := kmsg.CreateTopicsResponseTopic{
 			Topic: t.Topic,
+			// Kafka admin clients consume this successful response as a list.
+			// An empty configuration set is valid; a null list breaks Java Admin.
+			Configs: []kmsg.CreateTopicsResponseTopicConfig{},
 		}
 		// Creating a topic is a write to the cluster's namespace. Without
 		// this check a least-privileged principal could create topics it has

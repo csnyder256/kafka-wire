@@ -18,3 +18,8 @@ chaos-forensics/
 
 # Release build output
 dist-release/
+
+# Client example build outputs
+examples/nodejs/node_modules/
+examples/java/target/
+client-checks/

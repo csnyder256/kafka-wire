@@ -395,3 +395,7 @@ this software is compatible with.
 [Latest release](https://github.com/csnyder256/kafka-wire/releases/latest) · [Install, deploy and upgrade](DEPLOYMENT.md)
 
 Release assets include checksums and version-specific notes.
+
+## Client compatibility dashboard
+
+[Inspect client checks](https://csnyder256.github.io/kafka-wire/compatibility/) or generate a portable dashboard using `python3 scripts/client_check.py --output ./client-checks`. The runner checks pinned Go, Python, Node and Java clients against a broker it builds and owns. JSON receipts record exact client versions, source fingerprints, settings and actual checks. Missing tools and failed checks stay visible; advertised protocol ranges do not count as client passes. See [runnable examples](examples/README.md) for language-specific commands and limits.

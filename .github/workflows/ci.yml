@@ -106,7 +106,7 @@ jobs:
       # rather than a self-consistency check.
       - name: kafka-python round trip
         run: |
-          pip install --quiet kafka-python
+          pip install --quiet -r examples/python/requirements.txt
           python examples/python/roundtrip.py
 
       - name: kcat round trip
@@ -202,3 +202,59 @@ jobs:
             echo "Regenerate it: kafka-wire config reference > docs/configuration.md"
             exit 1
           fi
+
+  compatibility:
+    name: measured client compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: go.mod, cache: true }
+      - uses: actions/setup-node@v7
+        with: { node-version: '22' }
+      - uses: actions/setup-python@v7
+        with: { python-version: '3.12' }
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: '17', cache: maven }
+      - name: Validate receipt boundaries and API table freshness
+        run: python scripts/test_client_check.py
+      - name: Check all four pinned clients against an owned broker
+        run: python scripts/client_check.py --output client-checks
+      - name: Retain measured results and diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: client-compatibility-${{ github.sha }}
+          path: client-checks
+          if-no-files-found: error
+      - name: Assemble product dashboard with this measured source
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p site
+          cp -R docs/. site/
+          cp client-checks/compatibility.json site/compatibility/compatibility.json
+          touch site/.nojekyll
+      - name: Upload dashboard site
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v4
+        with: { path: site }
+
+  pages:
+    name: publish measured product dashboard
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [compatibility, test, race, objstore, clients, govulncheck, image, lint, docs]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: product-pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy tested dashboard
+        id: deployment
+        uses: actions/deploy-pages@v4

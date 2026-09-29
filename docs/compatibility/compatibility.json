@@ -1,0 +1,140 @@
+{
+  "schema": "kafka-wire.compatibility",
+  "version": 1,
+  "source": {
+    "commit": null,
+    "modified_checkout": null
+  },
+  "observed_at": null,
+  "clients": [
+    {
+      "language": "go",
+      "client": "franz-go",
+      "status": "unverified",
+      "checks": []
+    },
+    {
+      "language": "python",
+      "client": "kafka-python",
+      "status": "unverified",
+      "checks": []
+    },
+    {
+      "language": "node",
+      "client": "KafkaJS",
+      "status": "unverified",
+      "checks": []
+    },
+    {
+      "language": "java",
+      "client": "Apache Kafka",
+      "status": "unverified",
+      "checks": []
+    }
+  ],
+  "advertised_apis": [
+    {
+      "name": "Produce",
+      "min_version": 3,
+      "max_version": 9
+    },
+    {
+      "name": "Fetch",
+      "min_version": 4,
+      "max_version": 11
+    },
+    {
+      "name": "ListOffsets",
+      "min_version": 0,
+      "max_version": 5
+    },
+    {
+      "name": "Metadata",
+      "min_version": 0,
+      "max_version": 9
+    },
+    {
+      "name": "OffsetCommit",
+      "min_version": 0,
+      "max_version": 8
+    },
+    {
+      "name": "OffsetFetch",
+      "min_version": 0,
+      "max_version": 6
+    },
+    {
+      "name": "FindCoordinator",
+      "min_version": 0,
+      "max_version": 3
+    },
+    {
+      "name": "JoinGroup",
+      "min_version": 0,
+      "max_version": 7
+    },
+    {
+      "name": "Heartbeat",
+      "min_version": 0,
+      "max_version": 4
+    },
+    {
+      "name": "LeaveGroup",
+      "min_version": 0,
+      "max_version": 4
+    },
+    {
+      "name": "SyncGroup",
+      "min_version": 0,
+      "max_version": 5
+    },
+    {
+      "name": "SASLHandshake",
+      "min_version": 0,
+      "max_version": 1
+    },
+    {
+      "name": "SASLAuthenticate",
+      "min_version": 0,
+      "max_version": 2
+    },
+    {
+      "name": "ApiVersions",
+      "min_version": 0,
+      "max_version": 3
+    },
+    {
+      "name": "CreateTopics",
+      "min_version": 0,
+      "max_version": 6
+    },
+    {
+      "name": "DeleteTopics",
+      "min_version": 0,
+      "max_version": 5
+    },
+    {
+      "name": "DescribeConfigs",
+      "min_version": 0,
+      "max_version": 4
+    },
+    {
+      "name": "DescribeGroups",
+      "min_version": 0,
+      "max_version": 5
+    },
+    {
+      "name": "ListGroups",
+      "min_version": 0,
+      "max_version": 4
+    }
+  ],
+  "limitations": [
+    "Single-node, one-partition PLAINTEXT fixture on loopback.",
+    "Idempotent producers, transactions, replication and exactly-once processing are not implemented.",
+    "Modern consumer group protocol and Kafka Streams are not implemented; Java uses group.protocol=classic.",
+    "Go and Python examples consume directly without a group. Node and Java additionally check a classic group and committed offsets.",
+    "A pass covers the listed checks and pinned client only; it is not complete Kafka conformance, a security test or a production recommendation.",
+    "Imported reports are self-reported measurements; fingerprints aid reproduction and are not a signature."
+  ]
+}
