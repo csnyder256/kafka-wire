@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -45,6 +46,11 @@ func testDispatcher(t *testing.T) *Dispatcher {
 		DataDir:        dir,
 		Storage:        store,
 		Metrics:        metrics.New(),
+	})
+	t.Cleanup(func() {
+		if err := brk.Drain(context.Background()); err != nil {
+			t.Errorf("draining broker: %v", err)
+		}
 	})
 	if err := brk.LoadState(); err != nil {
 		t.Fatalf("loading broker state: %v", err)
