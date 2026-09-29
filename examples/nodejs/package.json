@@ -1,0 +1,12 @@
+{
+  "name": "kafka-wire-node-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node roundtrip.mjs"
+  },
+  "dependencies": {
+    "kafkajs": "2.2.4"
+  }
+}

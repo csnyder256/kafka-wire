@@ -1,11 +1,13 @@
 """Produce and consume against kafka-wire with kafka-python.
 
-    pip install kafka-python
+    pip install -r requirements.txt
     python roundtrip.py
 
 Sends one record of each of several shapes, reads them back, and checks that
 every byte survived. Exits non-zero if anything did not.
 """
+import json
+import platform
 import os
 import sys
 import time
@@ -30,13 +32,14 @@ MESSAGES = [
     '{"id": 1, "note": "json is just bytes here"}'.encode(),
     bytes(range(256)),
     b"",
+    "こんにちは · Kafka".encode(),
 ]
 
 TIMEOUT_S = 60
 
 
 def main() -> int:
-    admin = KafkaAdminClient(bootstrap_servers=BROKERS)
+    admin = KafkaAdminClient(bootstrap_servers=BROKERS, request_timeout_ms=15000)
     try:
         admin.create_topics([NewTopic(name=TOPIC, num_partitions=1, replication_factor=1)])
     except TopicAlreadyExistsError:
@@ -49,7 +52,7 @@ def main() -> int:
     # not offer, so it has to be switched off. kafka-python 2.x defaults it off
     # and does not accept the argument at all, hence the version check rather
     # than passing it unconditionally.
-    producer_args = {"bootstrap_servers": BROKERS}
+    producer_args = {"bootstrap_servers": BROKERS, "request_timeout_ms": 15000, "max_block_ms": 15000, "acks": "all"}
     if tuple(int(p) for p in kafka.__version__.split(".")[:1]) >= (3,):
         producer_args["enable_idempotence"] = False
     producer = KafkaProducer(**producer_args)
@@ -58,7 +61,7 @@ def main() -> int:
     # would otherwise look like a success right up until the consumer found
     # an empty topic.
     futures = [producer.send(TOPIC, value=m, key=b"k") for m in MESSAGES]
-    producer.flush()
+    producer.flush(timeout=30)
     for i, f in enumerate(futures):
         f.get(timeout=30)  # raises if the broker rejected this record
     producer.close()
@@ -82,20 +85,21 @@ def main() -> int:
     while len(received) < len(MESSAGES) and time.time() < deadline:
         batches = consumer.poll(timeout_ms=1000, max_records=len(MESSAGES))
         for records in batches.values():
-            received.extend(r.value for r in records)
+            received.extend(records)
     consumer.close()
 
-    if received != MESSAGES:
+    if len(received) != len(MESSAGES) or any(r.value != m or r.key != b"k" or r.partition != 0 or r.offset != i for i, (r, m) in enumerate(zip(received, MESSAGES))):
         print(
             f"MISMATCH: sent {len(MESSAGES)} records, got {len(received)} back",
             file=sys.stderr,
         )
         for i, (sent, got) in enumerate(zip(MESSAGES, received)):
-            if sent != got:
-                print(f"  record {i}: sent {len(sent)} bytes, got {len(got)}", file=sys.stderr)
+            if sent != got.value:
+                print(f"  record {i}: sent {len(sent)} bytes, got {len(got.value)}", file=sys.stderr)
         return 1
 
     print(f"consumed {len(received)} records, byte-identical to what was sent")
+    print(json.dumps({"schema":"kafka-wire.client-check","version":1,"client":"kafka-python","client_version":kafka.__version__,"language":"python","runtime":platform.python_version(),"status":"passed","records":len(received),"checks":["create-topic","produce-acks","byte-fidelity","key-fidelity","partition-order"],"settings":{"idempotence":False,"compression":"none","partitions":1,"security":"PLAINTEXT","group":"none"}}))
     return 0
 
 

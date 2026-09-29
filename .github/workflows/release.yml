@@ -23,9 +23,53 @@ jobs:
       - run: go test ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+  compatibility:
+    needs: vulncheck
+    name: measured release compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: go.mod, cache: true }
+      - uses: actions/setup-node@v7
+        with: { node-version: '22' }
+      - uses: actions/setup-python@v7
+        with: { python-version: '3.12' }
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: '17', cache: maven }
+      - name: Validate receipt boundaries and API table freshness
+        run: python scripts/test_client_check.py
+      - name: Check all four pinned clients against an owned broker
+        run: python scripts/client_check.py --output client-checks
+      - name: Package the measured dashboard and runnable sources
+        run: |
+          mkdir -p compatibility-bundle/examples
+          cp -R client-checks/. compatibility-bundle/
+          git ls-files examples | tar -cf - -T - | tar -xf - -C compatibility-bundle
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          import hashlib, os, zipfile
+          root=Path('compatibility-bundle')
+          manifest=''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(root).as_posix()+'\n' for p in sorted(root.rglob('*')) if p.is_file())
+          (root/'SHA256SUMS').write_text(manifest)
+          name='kafka-wire-compatibility-'+os.environ['GITHUB_REF_NAME']+'.zip'
+          with zipfile.ZipFile(name,'w',zipfile.ZIP_DEFLATED) as z:
+              for p in sorted(root.rglob('*')):
+                  if p.is_file(): z.write(p,p.relative_to(root))
+          Path('compatibility-checksums.txt').write_text(hashlib.sha256(Path(name).read_bytes()).hexdigest()+'  '+name+'\n')
+          PYCODE
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            kafka-wire-compatibility-*.zip
+            compatibility-checksums.txt
+          body_path: docs/releases/${{ github.ref_name }}.md
+          fail_on_unmatched_files: true
+
   binaries:
     name: binaries
-    needs: vulncheck
+    needs: [vulncheck, compatibility]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -67,7 +111,7 @@ jobs:
 
   image:
     name: container image
-    needs: vulncheck
+    needs: [vulncheck, compatibility]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
