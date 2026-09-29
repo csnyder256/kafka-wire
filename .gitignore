@@ -15,3 +15,6 @@
 __pycache__/
 *.pyc
 chaos-forensics/
+
+# Release build output
+dist-release/

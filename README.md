@@ -388,3 +388,10 @@ Apache Kafka is a registered trademark of the Apache Software Foundation.
 kafka-wire is an independent project, is not affiliated with or endorsed by the
 Apache Software Foundation, and the name is used only to describe the wire protocol
 this software is compatible with.
+
+
+## Release downloads and deployment
+
+[Latest release](https://github.com/csnyder256/kafka-wire/releases/latest) · [Install, deploy and upgrade](DEPLOYMENT.md)
+
+Release assets include checksums and version-specific notes.
