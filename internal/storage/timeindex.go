@@ -115,17 +115,27 @@ func (t *TimeIndex) MaybeAppend(ts int64, relOffset int64, position int64) error
 	return nil
 }
 
-// LookupOffset returns the smallest relative offset whose containing
-// batch had Timestamp >= ts. Returns (0, false) if no entry meets the
-// criterion (caller should fall back to LATEST).
-func (t *TimeIndex) LookupOffset(ts int64) (int64, bool) {
+// FloorOffset returns the relative offset of the last sampled entry whose
+// Timestamp is <= ts, and whether any such entry exists. Returns (0, false)
+// when every sample is newer than ts, so the caller starts its scan at the
+// beginning of the segment.
+//
+// This is deliberately the sample at or BEFORE ts, not the first sample at or
+// after it. The index is sparse (one sample per IndexInterval bytes), so a
+// sample is a lower bound on the answer, never the answer: the first sample
+// with Timestamp >= ts can sit a whole interval past the first batch that
+// actually reaches ts, and returning it skipped every record in between. The
+// sample's stored timestamp is never lower than its batch's real MaxTimestamp
+// (MaybeAppend clamps it upward, never down), so every batch that can match
+// lies at or after the floor and a forward scan from here cannot miss one.
+func (t *TimeIndex) FloorOffset(ts int64) (int64, bool) {
 	if len(t.entries) == 0 {
 		return 0, false
 	}
 	idx := sort.Search(len(t.entries), func(k int) bool {
-		return t.entries[k].Timestamp >= ts
-	})
-	if idx == len(t.entries) {
+		return t.entries[k].Timestamp > ts
+	}) - 1
+	if idx < 0 {
 		return 0, false
 	}
 	return int64(t.entries[idx].RelOffset), true
