@@ -488,8 +488,12 @@ func (l *Log) LatestOffset() int64 {
 	return l.HighWatermark()
 }
 
-// LookupOffsetByTimestamp returns the smallest offset whose batch
-// MaxTimestamp >= ts. Used by ListOffsets API.
+// LookupOffsetByTimestamp returns the offset of the first batch, in offset
+// order, whose MaxTimestamp >= ts. Used by ListOffsets API.
+//
+// Segments are scanned in order and the first one that holds such a batch
+// wins, which is what makes this the *smallest* matching offset rather than
+// merely a matching one.
 func (l *Log) LookupOffsetByTimestamp(ts int64) (int64, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

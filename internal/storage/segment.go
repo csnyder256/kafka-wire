@@ -328,14 +328,52 @@ func (s *Segment) FindBatchAt(targetOffset int64) (int64, error) {
 	return s.logSize, nil
 }
 
-// LookupOffsetByTimestamp returns the smallest relative offset whose
-// containing batch had MaxTimestamp >= ts.
+// LookupOffsetByTimestamp returns the offset of the first batch in this
+// segment whose MaxTimestamp >= ts, and whether such a batch exists.
+//
+// The time index is sparse: it samples one batch per IndexInterval bytes, so
+// its nearest sample at or before ts can be a whole interval short of the real
+// answer. Returning that sample directly (which is what this used to do)
+// reported a batch *after* the requested time and silently skipped every
+// record in between, so a consumer seeking by time -- or the admin
+// reset-offset strategy=timestamp -- missed records whose timestamps were at or
+// after the target. The floor sample gives the byte position to start from
+// (the offset index samples the same batches, so it holds that position), and
+// the log is scanned forward from there for the first batch that actually
+// reaches ts.
 func (s *Segment) LookupOffsetByTimestamp(ts int64) (int64, bool) {
-	rel, ok := s.tix.LookupOffset(ts)
-	if !ok {
+	if s.logSize == 0 {
 		return 0, false
 	}
-	return s.baseOffset + rel, true
+	start := int64(0)
+	if rel, ok := s.tix.FloorOffset(ts); ok {
+		if pos, ok := s.idx.LookupPosition(rel); ok {
+			start = pos
+		}
+	}
+	header := make([]byte, v2HeaderSize)
+	for pos := start; pos < s.logSize; {
+		n, err := s.logFile.ReadAt(header, pos)
+		if n < v2HeaderSize {
+			if err != nil && !errors.Is(err, io.EOF) {
+				return 0, false
+			}
+			break
+		}
+		h, perr := ParseBatchHeader(header)
+		if perr != nil {
+			break
+		}
+		if h.MaxTimestamp >= ts {
+			return h.BaseOffset, true
+		}
+		next := pos + int64(h.TotalSize())
+		if next <= pos {
+			break // a zero-length batch would spin forever
+		}
+		pos = next
+	}
+	return 0, false
 }
 
 // Sync fsyncs the log + index + timeindex.
