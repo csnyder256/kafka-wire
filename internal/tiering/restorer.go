@@ -72,12 +72,19 @@ func (r *Restorer) EntryFor(topic string, partition int32, baseOffset int64) (Se
 // available in the local cache. Blocks until the file is on disk or
 // returns an error. Concurrent calls for the same segment dedupe.
 func (r *Restorer) Restore(ctx context.Context, topic string, partition int32, baseOffset int64) error {
-	if r.cache.Has(topic, partition, baseOffset) {
-		return nil
-	}
 	entry, ok := r.manifest.Lookup(topic, partition, baseOffset)
 	if !ok {
 		return ErrNotArchived
+	}
+	// The cache stores a restored segment under its tenant path (see
+	// Cache.PathTenant), so the presence check has to use the entry's tenant.
+	// Asking for the shared path here missed every tenant-scoped segment --
+	// the download below writes to the tenant path, never the shared one --
+	// so each fetch re-downloaded the whole segment from cold storage even
+	// though it was already on local disk, defeating the cache entirely for
+	// tenant topics.
+	if r.cache.HasTenant(entry.TenantID, topic, partition, baseOffset) {
+		return nil
 	}
 
 	r.mu.Lock()
