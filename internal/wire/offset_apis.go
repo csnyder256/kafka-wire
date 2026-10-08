@@ -100,6 +100,14 @@ func offsetLeaderEpoch(co broker.CommittedOffset) int32 {
 // OffsetFetch: return committed offsets for the requested
 // (topic, partition) tuples. If the request omits Topics entirely,
 // return ALL topics committed by the group.
+//
+// Authorization matches the commit path, which already enforces it: a
+// principal needs `read` on the group, and `read` on any topic it names
+// explicitly. Without the group check any authenticated principal could
+// read every other principal's committed offsets -- topic names,
+// partition counts and how far each group has consumed -- which is what
+// docs/security.md already promises is enforced and what the ACL store
+// exists to prevent.
 func (d *Dispatcher) handleOffsetFetch(state *connState, hdr RequestHeader, body []byte) error {
 	req := kmsg.NewPtrOffsetFetchRequest()
 	req.SetVersion(hdr.APIVersion)
@@ -112,17 +120,41 @@ func (d *Dispatcher) handleOffsetFetch(state *connState, hdr RequestHeader, body
 
 	store := d.brk.Offsets()
 	groupID := req.Group
+	acl := d.brk.ACL()
 
 	// v8+ supports multi-group fetch via req.Groups; we still answer
 	// the singleton case correctly. If req.Groups is non-empty, build
 	// the v8 response shape.
 	if len(req.Groups) > 0 {
 		for _, g := range req.Groups {
+			if acl != nil && !acl.AuthorizeGroup(state.saslPrincipal, g.Group, "read") {
+				// Same group check the commit path makes. A group's
+				// committed offsets name its topics and how far it has
+				// read them; an unauthorized principal must not be able
+				// to enumerate that. The error is per-group because the
+				// v8+ shape has nowhere else to put it.
+				resp.Groups = append(resp.Groups, kmsg.OffsetFetchResponseGroup{
+					Group:     g.Group,
+					ErrorCode: errCodeGroupAuthorizationFailed,
+				})
+				continue
+			}
 			rg := kmsg.OffsetFetchResponseGroup{
 				Group: g.Group,
 			}
 			for _, t := range g.Topics {
 				rt := kmsg.OffsetFetchResponseGroupTopic{Topic: t.Topic}
+				if acl != nil && !acl.AuthorizeTopic(state.saslPrincipal, t.Topic, "read") {
+					for _, partition := range t.Partitions {
+						rp := kmsg.NewOffsetFetchResponseGroupTopicPartition()
+						rp.Partition = partition
+						rp.Offset = -1
+						rp.ErrorCode = errCodeTopicAuthorizationFailed
+						rt.Partitions = append(rt.Partitions, rp)
+					}
+					rg.Topics = append(rg.Topics, rt)
+					continue
+				}
 				for _, partition := range t.Partitions {
 					co := store.FetchOffset(g.Group, t.Topic, partition)
 					rp := kmsg.OffsetFetchResponseGroupTopicPartition{
@@ -139,6 +171,14 @@ func (d *Dispatcher) handleOffsetFetch(state *connState, hdr RequestHeader, body
 			}
 			resp.Groups = append(resp.Groups, rg)
 		}
+		return d.writeKmsgResponse(state, hdr, resp, req.IsFlexible())
+	}
+
+	// The group check is the boundary for the legacy shape too. v2+ carries
+	// a top-level error code; v0-v1 have no such field, so a denied
+	// principal gets no topics back rather than a fabricated empty result.
+	if acl != nil && !acl.AuthorizeGroup(state.saslPrincipal, groupID, "read") {
+		resp.ErrorCode = errCodeGroupAuthorizationFailed
 		return d.writeKmsgResponse(state, hdr, resp, req.IsFlexible())
 	}
 
@@ -175,6 +215,17 @@ func (d *Dispatcher) handleOffsetFetch(state *connState, hdr RequestHeader, body
 	// Explicit topic list.
 	for _, t := range req.Topics {
 		rt := kmsg.OffsetFetchResponseTopic{Topic: t.Topic}
+		if acl != nil && !acl.AuthorizeTopic(state.saslPrincipal, t.Topic, "read") {
+			for _, partition := range t.Partitions {
+				rp := kmsg.NewOffsetFetchResponseTopicPartition()
+				rp.Partition = partition
+				rp.Offset = -1
+				rp.ErrorCode = errCodeTopicAuthorizationFailed
+				rt.Partitions = append(rt.Partitions, rp)
+			}
+			resp.Topics = append(resp.Topics, rt)
+			continue
+		}
 		for _, partition := range t.Partitions {
 			co := store.FetchOffset(groupID, t.Topic, partition)
 			rp := kmsg.OffsetFetchResponseTopicPartition{
