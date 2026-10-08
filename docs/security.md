@@ -131,11 +131,14 @@ topic, read on a consumer group. Once any entry exists, a principal with no
 matching entry is denied.
 
 **Scope, stated plainly:** authorization is enforced on Produce, Fetch,
-OffsetCommit, OffsetFetch and the consumer group APIs. It is **not** enforced
-on CreateTopics, DeleteTopics, Metadata, ListOffsets, DescribeConfigs,
-ListGroups or DescribeGroups, so an authenticated principal can still create
-and delete topics. If that matters for your deployment, do not expose the
-broker to principals you would not trust with topic administration.
+OffsetCommit, OffsetFetch, CreateTopics, DeleteTopics, Metadata, ListOffsets,
+JoinGroup and DescribeGroups: a principal with no matching entry is denied, and
+Metadata hides topics it cannot read. It is **not** enforced on SyncGroup,
+Heartbeat, LeaveGroup, DescribeConfigs or ListGroups. ListGroups returns every
+group id, and DescribeConfigs returns any topic's configuration, regardless of
+grants, so an authenticated principal can still enumerate that. If that matters
+for your deployment, do not expose the broker to principals you would not trust
+with it.
 
 Grant the narrowest permission that works. A service that only publishes needs
 write on one topic and nothing else, and that is what limits the damage when its

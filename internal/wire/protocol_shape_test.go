@@ -67,13 +67,23 @@ func testDispatcher(t *testing.T) *Dispatcher {
 // the response is constructed by the test.
 func exchange(t *testing.T, d *Dispatcher, apiKey int16, version int16, req kmsg.Request) (kmsg.Response, []byte) {
 	t.Helper()
+	return exchangeAs(t, d, "", apiKey, version, req)
+}
+
+// exchangeAs is exchange with an authenticated SASL principal on the
+// connection, which is what the ACL-enforcing handlers read. Tests that
+// configure an ACL store use it to ask as a named principal; every other
+// caller keeps using exchange.
+func exchangeAs(t *testing.T, d *Dispatcher, principal string, apiKey int16, version int16, req kmsg.Request) (kmsg.Response, []byte) {
+	t.Helper()
 
 	client, server := net.Pipe()
 	state := &connState{
-		conn:         server,
-		remote:       "test",
-		saslComplete: true,
-		dispatcher:   d,
+		conn:          server,
+		remote:        "test",
+		saslComplete:  true,
+		saslPrincipal: principal,
+		dispatcher:    d,
 	}
 
 	req.SetVersion(version)
