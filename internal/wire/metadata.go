@@ -30,12 +30,23 @@ func (d *Dispatcher) handleMetadata(state *connState, hdr RequestHeader, body []
 		Port:   d.brk.AdvertisedPort(),
 	}}
 
-	// Topic list. Per Kafka spec:
-	//   - req.Topics nil OR empty: return ALL topics
-	//   - req.Topics has explicit names: return only those
-	//   - if AllowAutoTopicCreation=true and topic missing, create it
+	// Topic list. The topic array has three shapes and the null/empty
+	// distinction is load-bearing, not cosmetic:
+	//   - null: return ALL topics
+	//   - empty (non-null): return NO topics. The array became nullable in
+	//     v1, and from then on an empty array is a deliberate "no topics at
+	//     all" -- the shape franz-go's broker-only metadata refresh sends
+	//     (it wants the broker list and says nothing about any topic).
+	//   - explicit names: return only those
+	//   - if AllowAutoTopicCreation=true and a named topic is missing, create it
+	//
+	// v0 is the exception: its array is not nullable, so an empty array there
+	// means "all topics". Kafka spells the rule out in
+	// MetadataRequest.isAllTopics: `topics == null || (topics.isEmpty() &&
+	// version == 0)`. kmsg preserves the distinction (nil vs non-nil empty
+	// slice), so this is the one place it has to be honored.
 	var requested []string
-	includeAll := len(req.Topics) == 0
+	includeAll := req.Topics == nil || (hdr.APIVersion == 0 && len(req.Topics) == 0)
 	if !includeAll {
 		for _, t := range req.Topics {
 			if t.Topic != nil {

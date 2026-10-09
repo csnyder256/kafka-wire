@@ -28,6 +28,7 @@ import (
 const (
 	apiKeyProduce        int16 = 0
 	apiKeyFetch          int16 = 1
+	apiKeyMetadata       int16 = 3
 	apiKeyAPIVersions    int16 = 18
 	apiKeyCreateTopics   int16 = 19
 	apiKeyInitProducerID int16 = 22

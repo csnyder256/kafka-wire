@@ -76,6 +76,8 @@ func flexibleRequest(apiKey, apiVersion int16) bool {
 		return apiVersion >= 3
 	case apiKeyCreateTopics:
 		return apiVersion >= 5
+	case apiKeyMetadata:
+		return apiVersion >= 9
 	case apiKeyInitProducerID:
 		return apiVersion >= 2
 	}
