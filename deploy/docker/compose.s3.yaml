@@ -7,7 +7,7 @@
 # endpoint and credentials below change.
 services:
   s3:
-    image: rustfs/rustfs:1.0.0
+    image: rustfs/rustfs:1.0.1
     environment:
       RUSTFS_ACCESS_KEY: kafkawire
       RUSTFS_SECRET_KEY: kafkawire-secret
