@@ -77,9 +77,23 @@ func (d *Dispatcher) handleFetch(state *connState, hdr RequestHeader, body []byt
 				continue
 			}
 			for _, p := range t.Partitions {
-				pr := kmsg.FetchResponseTopicPartition{
-					Partition: p.Partition,
-				}
+				// Build the partition through kmsg's constructor rather than a
+				// bare struct literal. FetchResponseTopicPartition.Default()
+				// seeds PreferredReadReplica, LastStableOffset and
+				// LogStartOffset to -1, the protocol's "none / unknown"
+				// markers. The Go zero value of each is 0, and 0 is a
+				// legitimate broker id and a legitimate offset, so a client
+				// cannot tell a fabricated value from a real one.
+				//
+				// The error path below sets only the error code and the
+				// watermark fields, so before this it carried
+				// PreferredReadReplica 0. A Fetch v11 client reads that as
+				// "fetch from broker 0" and drops the error on the floor: it
+				// redirects the partition to a broker that does not exist in
+				// a single-node cluster whose broker id is 1, and retries
+				// forever while the broker log shows every fetch answered.
+				pr := kmsg.NewFetchResponseTopicPartition()
+				pr.Partition = p.Partition
 				bytes, _, hwm, logStart, err := d.brk.FetchAuthorized(t.Topic, p.Partition, p.FetchOffset, int(p.PartitionMaxBytes), state.saslPrincipal, state.tenantID)
 				if err != nil {
 					switch {
@@ -101,18 +115,10 @@ func (d *Dispatcher) handleFetch(state *connState, hdr RequestHeader, body []byt
 				pr.HighWatermark = hwm
 				pr.LastStableOffset = hwm
 				pr.LogStartOffset = logStart
-				// -1 means "no preferred replica, keep reading from me".
-				//
-				// The protocol default for this field is -1, but the Go zero
-				// value is 0, and 0 is a legitimate broker id. A client that
-				// reads 0 here dutifully tries to fetch from broker 0, which
-				// does not exist in a single-node cluster whose broker id is
-				// 1, so it silently retries the same offset forever while the
-				// broker log shows it happily serving the records every time.
-				//
-				// The field only exists in Fetch v11 and above, so a client
-				// that negotiates lower never sees it. That is precisely how
-				// a bug like this survives in production.
+				// PreferredReadReplica is already -1 from the constructor
+				// above: "no preferred replica, keep reading from me". The
+				// field only exists in Fetch v11 and above, so a client that
+				// negotiates lower never sees it.
 				pr.PreferredReadReplica = -1
 				// Explicitly empty (not nil) so kmsg encodes a 0-length
 				// array rather than null. some clients expect an
