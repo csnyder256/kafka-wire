@@ -62,14 +62,61 @@ func buildBinary(t *testing.T) string {
 	return binPath
 }
 
+// freePort hands out loopback ports for the brokers a test starts. It records
+// what it has already returned so no two listeners in one test run are ever
+// pointed at the same port.
+//
+// The probe binds :0 and releases it before returning, so the kernel is free to
+// hand the very same ephemeral port to the next call -- and under load it does.
+// The broker then refuses to start, because its Kafka and admin listeners are
+// different protocols and may not share an address:
+//
+//	configuration is not usable:
+//	  listeners.kafka and listeners.admin are both "127.0.0.1:35453"
+//
+// That is not a broker bug; it is two listeners genuinely colliding. Skipping a
+// port already handed out makes consecutive calls return distinct ports, which
+// is what startBroker needs for its two listeners. (A port grabbed by an
+// unrelated process in the window between this close and the broker's bind is
+// still possible and cannot be prevented from here; the broker would have to
+// inherit the listening socket for that, which its env-var configuration does
+// not support.)
+var (
+	freePortMu sync.Mutex
+	freePorts  = map[int]bool{}
+)
+
 func freePort(t *testing.T) int {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	freePortMu.Lock()
+	defer freePortMu.Unlock()
+	for {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		port := l.Addr().(*net.TCPAddr).Port
+		l.Close()
+		if !freePorts[port] {
+			freePorts[port] = true
+			return port
+		}
 	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port
+}
+
+// TestFreePortHandsOutDistinctPorts pins the invariant startBroker depends on:
+// the two listeners it configures must never be handed the same port. It draws
+// enough ports that the kernel's habit of re-offering a just-released one would
+// show up as a duplicate; with the registry in freePort it never does.
+func TestFreePortHandsOutDistinctPorts(t *testing.T) {
+	seen := map[int]bool{}
+	for i := 0; i < 2000; i++ {
+		p := freePort(t)
+		if seen[p] {
+			t.Fatalf("freePort returned %d twice in %d draws", p, i+1)
+		}
+		seen[p] = true
+	}
 }
 
 type brokerProc struct {
