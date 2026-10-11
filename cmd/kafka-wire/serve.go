@@ -164,15 +164,17 @@ FLAGS
 		if err != nil {
 			return fmt.Errorf("opening the restore cache: %w", err)
 		}
-		uploader := tiering.NewUploader(tiering.Config{
+		// AttachArchive also wires the restorer and, importantly, the
+		// tenant resolver, so archived segments carry the topic's owner
+		// tenant. See its doc comment.
+		uploader := brk.AttachArchive(backend, manifest, cache, tiering.Config{
 			Prefix:      cfg.Archive.Prefix,
 			ArchiveAge:  cfg.Archive.Age,
 			PartSize:    cfg.Archive.S3.PartSize,
 			Tick:        30 * time.Second,
 			Concurrency: cfg.Archive.Concurrency,
-		}, backend, manifest, mreg)
+		}, mreg)
 		go uploader.Run(runCtx, brk.Topics())
-		brk.AttachRestorer(tiering.NewRestorer("", cache, manifest, backend, mreg), manifest, cache)
 		// Retention deletes a segment locally only once the archive holds
 		// exactly that segment.
 		retention.Archived = func(topic string, partition int32, seg *storage.Segment) bool {
