@@ -16,9 +16,13 @@ import (
 // twice, restart a container before the old one has exited, or point a second
 // Compose service at the same volume.
 //
-// The lock is held by an open file handle for the life of the process, so the
-// operating system releases it even if the broker is killed, which means a
-// crash never leaves a stale lock a user has to clear by hand.
+// The lock is the flock on an open file handle, not the file, so the operating
+// system releases it even if the broker is killed and a crash never leaves a
+// stale lock a user has to clear by hand. The file itself is deliberately left
+// in place for the life of the data directory: it is the rendezvous every
+// broker must open to contend for the lock, so unlinking it hands the next
+// broker a different file to lock and lets it in alongside a holder that is
+// still running.
 type DirLock struct {
 	f *os.File
 }
@@ -46,17 +50,16 @@ func LockDir(dir string) (*DirLock, error) {
 	return &DirLock{f: f}, nil
 }
 
-// Release drops the lock.
+// Release drops the lock. The lock file is left in place on purpose; see the
+// DirLock doc comment.
 func (l *DirLock) Release() error {
 	if l == nil || l.f == nil {
 		return nil
 	}
-	name := l.f.Name()
 	err := unlockFile(l.f)
 	if cerr := l.f.Close(); err == nil {
 		err = cerr
 	}
-	_ = os.Remove(name)
 	l.f = nil
 	return err
 }
