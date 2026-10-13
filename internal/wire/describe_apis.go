@@ -95,10 +95,21 @@ func (d *Dispatcher) handleDescribeGroups(state *connState, hdr RequestHeader, b
 		rg.ProtocolType = "consumer"
 		rg.Protocol = snap.Protocol
 		for _, m := range snap.Members {
+			// DescribeGroups exists to answer "who is in this group and
+			// what do they own". The subscription and assignment are
+			// opaque blobs the coordinator already holds, and the member
+			// rows are useless without them: a client asking for member
+			// detail (kafka-consumer-groups.sh --describe --members
+			// --verbose, AdminClient.describeConsumerGroups, a lag
+			// dashboard) reads exactly these two fields to attribute
+			// partitions to members. Sending them empty reports a group
+			// whose members own nothing.
 			rg.Members = append(rg.Members, kmsg.DescribeGroupsResponseGroupMember{
-				MemberID:   m.MemberID,
-				ClientID:   m.ClientID,
-				ClientHost: m.ClientHost,
+				MemberID:         m.MemberID,
+				ClientID:         m.ClientID,
+				ClientHost:       m.ClientHost,
+				ProtocolMetadata: m.Subscription,
+				MemberAssignment: m.Assignment,
 			})
 		}
 		resp.Groups = append(resp.Groups, rg)

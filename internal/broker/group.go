@@ -674,6 +674,20 @@ type MemberSnapshot struct {
 	ClientHost       string
 	SessionTimeoutMS int32
 	LastHeartbeat    time.Time
+
+	// Subscription is the protocol metadata the member sent in its
+	// JoinGroup (for a normal consumer, the encoded
+	// ConsumerProtocolSubscription), and Assignment is the bytes the
+	// group leader handed it back in SyncGroup.
+	//
+	// DescribeGroups reports both verbatim, and they are the whole point
+	// of that API: the assignment is the only way to answer "which member
+	// owns which partition", which is what
+	// `kafka-consumer-groups.sh --describe --members --verbose`,
+	// AdminClient.describeConsumerGroups and every consumer-lag dashboard
+	// read. Both are opaque here: the broker never decodes them.
+	Subscription []byte
+	Assignment   []byte
 }
 
 // AllGroups returns a snapshot of every known group.
@@ -695,6 +709,8 @@ func (g *GroupCoordinator) AllGroups() []Snapshot {
 				ClientHost:       m.ClientHost,
 				SessionTimeoutMS: m.SessionTimeoutMS,
 				LastHeartbeat:    lg.heartbeats[m.MemberID],
+				Subscription:     m.Subscription,
+				Assignment:       m.Assignment,
 			})
 		}
 		out = append(out, s)
