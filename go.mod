@@ -8,7 +8,7 @@ go 1.26.0
 // Go 1.26.0 itself and shipped standard-library CVEs fixed in later patch
 // releases. Bump it when a new 1.26.x ships; the govulncheck job in CI
 // fails when the pinned standard library has a known reachable CVE.
-toolchain go1.26.8
+toolchain go1.26.9
 
 require (
 	github.com/golang/snappy v1.0.0
@@ -42,7 +42,7 @@ require (
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
