@@ -328,7 +328,18 @@ func cmdTopic(ctx context.Context, args []string) error {
 			if r.Err != nil {
 				return fmt.Errorf("creating %s: %w", r.Topic, r.Err)
 			}
-			fmt.Printf("created %s with %d partition(s)\n", r.Topic, *partitions)
+			// Report the partition count the broker created, not the one the
+			// user typed. They are the same only when the broker took the
+			// request at face value, and printing the request back at the user
+			// is how "created demo with 0 partition(s)" got printed over a
+			// one-partition topic.
+			n := r.NumPartitions
+			if n <= 0 {
+				// No count in the response (a broker older than the v5 field
+				// that carries it); the requested value is all we know.
+				n = int32(*partitions)
+			}
+			fmt.Printf("created %s with %d partition(s)\n", r.Topic, n)
 		}
 	case "describe":
 		if fs.NArg() == 0 {

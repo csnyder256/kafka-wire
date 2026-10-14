@@ -311,6 +311,7 @@ const (
 	errCodeUnsupportedVersion         int16 = 35
 	errCodeTopicAlreadyExists         int16 = 36
 	errCodeInvalidPartitions          int16 = 37
+	errCodeInvalidReplicationFactor   int16 = 38
 	errCodeInvalidTopic               int16 = 17
 	errCodeSaslAuthFailed             int16 = 58
 	errCodeUnsupportedSaslMech        int16 = 33
