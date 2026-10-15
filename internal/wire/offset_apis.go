@@ -36,6 +36,35 @@ func (d *Dispatcher) handleOffsetCommit(state *connState, hdr RequestHeader, bod
 	}
 
 	store := d.brk.Offsets()
+
+	// Who may write these offsets. OffsetCommit is the one group API whose
+	// caller is not necessarily the group's current owner, and the request
+	// carries the Generation and MemberID of the member issuing it (v1+; kmsg
+	// defaults Generation to -1, the protocol's "store offsets only" form,
+	// which is also what a v0 request decodes to since that version has no
+	// such field on the wire).
+	//
+	// Skipping this check lets a member of an old generation — a consumer the
+	// liveness sweep evicted, or one that has not noticed a rebalance — commit
+	// the offsets it read before its partitions moved. The commit succeeds,
+	// the group's stored offsets go backwards, and the next restart or
+	// reassignment resumes from the rewound position and reprocesses records
+	// the group had already handled. Kafka answers ILLEGAL_GENERATION; the
+	// code is reported per requested partition, like every other refusal here.
+	if code := d.brk.Groups().ValidateOffsetCommit(req.Group, req.MemberID, req.Generation); code != errCodeNone {
+		for _, t := range req.Topics {
+			rt := kmsg.OffsetCommitResponseTopic{Topic: t.Topic}
+			for _, p := range t.Partitions {
+				rt.Partitions = append(rt.Partitions, kmsg.OffsetCommitResponseTopicPartition{
+					Partition: p.Partition,
+					ErrorCode: code,
+				})
+			}
+			resp.Topics = append(resp.Topics, rt)
+		}
+		return d.writeKmsgResponse(state, hdr, resp, req.IsFlexible())
+	}
+
 	for _, t := range req.Topics {
 		rt := kmsg.OffsetCommitResponseTopic{Topic: t.Topic}
 		// Per-topic authorize too: a group might be allowed but the
