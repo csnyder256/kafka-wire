@@ -628,6 +628,71 @@ func (g *GroupCoordinator) Heartbeat(args HeartbeatArgs) int16 {
 	return 0
 }
 
+// ValidateOffsetCommit decides whether an OffsetCommit may overwrite a group's
+// stored offsets, and returns the Kafka error code for it (0 = allowed).
+//
+// OffsetCommit is the one group API whose caller is not necessarily the group's
+// current owner. It carries the Generation and MemberID of the member issuing
+// it, and the protocol defines Generation -1 with an empty member id as "store
+// offsets only": the group is being used as an offset table, there is no
+// generation to check, and kmsg defaults the field that way for v0, which has
+// no such field on the wire at all.
+//
+// A commit that does carry a generation is validated the way Kafka validates
+// it, because the failure this prevents is invisible until much later. A member
+// of an old generation still holds the offsets it read before its partitions
+// were reassigned; if its commit lands, the group's stored offsets go
+// backwards, and the next restart or reassignment resumes from the rewound
+// position and reprocesses everything the group had already handled. The client
+// that did the damage is told the commit succeeded.
+//
+// The rules, in the order Kafka applies them:
+//
+//	generation < 0, no member id   offsets-only group: allowed while the group
+//	                               has no members, otherwise UNKNOWN_MEMBER,
+//	                               because there is no member whose generation
+//	                               could be checked against
+//	generation != the group's      ILLEGAL_GENERATION
+//	dead group                     ILLEGAL_GENERATION
+//	group completing a rebalance   REBALANCE_IN_PROGRESS: the assignment for
+//	                               this generation does not exist yet
+//	member id not in the group     UNKNOWN_MEMBER
+//
+// Anything else is allowed. A group this broker has never seen holds no offsets
+// to protect, so the offsets-only form may still create one.
+func (g *GroupCoordinator) ValidateOffsetCommit(groupID, memberID string, generation int32) int16 {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	lg, ok := g.live[groupID]
+	if !ok || lg.persisted == nil {
+		if generation < 0 && memberID == "" {
+			return 0
+		}
+		return unknownMember
+	}
+
+	if generation < 0 && memberID == "" {
+		if len(lg.persisted.Members) == 0 {
+			return 0
+		}
+		return unknownMember
+	}
+	if generation != lg.persisted.Generation {
+		return illegalGeneration
+	}
+	if lg.state == GroupDead {
+		return illegalGeneration
+	}
+	if lg.state == GroupCompletingRebalance {
+		return rebalanceInProgress
+	}
+	if _, ok := lg.persisted.Members[memberID]; !ok {
+		return unknownMember
+	}
+	return 0
+}
+
 // LeaveGroup removes a member. Triggers a fresh rebalance for the
 // remaining members on next JoinGroup.
 func (g *GroupCoordinator) LeaveGroup(groupID, memberID string) int16 {
