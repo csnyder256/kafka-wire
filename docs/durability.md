@@ -44,6 +44,24 @@ storage:
 leader is the only replica, so `acks=all` and `acks=1` are the same thing here.
 Nothing lies to the client about this; there is simply only one copy.
 
+## Consumer group offsets
+
+Each group's committed offsets and its member list are one JSON document,
+`groups/<id>.json`, replaced by write-temp-then-rename, so a restart sees
+either the previous document or the new one and never a half-written one.
+
+The document is written under the offset store's lock. Commits from different
+consumers of the same group therefore serialize with each other and with the
+rebalance that rewrites the member list, which is what makes the ordinary case
+-- several consumers of one group committing at the same time, on separate
+connections -- safe. Before that lock covered the write, two simultaneous
+commits shared one temp path, so one of them failed its rename and reported
+CORRUPT_MESSAGE for a commit that had already been recorded in memory.
+
+An offset commit is acknowledged once the rename succeeds. The document is not
+fsynced, so a power loss can cost the last few seconds of commits for the same
+reason it can cost the last few seconds of records.
+
 ## What the cold tier buys
 
 Once a segment is archived it exists in two places, and the second one is

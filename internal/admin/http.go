@@ -153,13 +153,18 @@ func (h *handlers) resetOffset(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "group_id required")
 		return
 	}
-	gs := h.brk.Offsets().Get(body.GroupID)
-	if gs == nil {
+	// AllOffsets takes a copy under the store's lock. Reading the live map
+	// instead raced OffsetCommit, and a concurrent map iteration and write is
+	// a fatal runtime error rather than a wrong answer: it aborts the whole
+	// broker process. This endpoint is polled by the dashboard while consumers
+	// are committing, so the overlap is the normal case, not a corner.
+	all := h.brk.Offsets().AllOffsets(body.GroupID)
+	if len(all) == 0 {
 		writeError(w, http.StatusNotFound, "group has no committed offsets")
 		return
 	}
 	resets := []map[string]any{}
-	for topic, parts := range gs.Offsets {
+	for topic, parts := range all {
 		if body.Topic != "" && body.Topic != topic {
 			continue
 		}
@@ -487,11 +492,12 @@ func groupDetailFor(h *handlers, g broker.Snapshot) map[string]any {
 // (HWM - committed) per (topic, partition).
 func groupLag(h *handlers, groupID string) []map[string]any {
 	out := []map[string]any{}
-	gs := h.brk.Offsets().Get(groupID)
-	if gs == nil {
-		return out
-	}
-	for topic, parts := range gs.Offsets {
+	// A copy, taken under the store's lock: the live map is written by
+	// OffsetCommit on whichever connection goroutines are committing while
+	// this runs, and iterating a map another goroutine is writing is a fatal
+	// runtime error, not a stale read.
+	all := h.brk.Offsets().AllOffsets(groupID)
+	for topic, parts := range all {
 		t := h.brk.Topics().Get(topic)
 		if t == nil {
 			continue

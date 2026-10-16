@@ -152,6 +152,29 @@ func (g *GroupCoordinator) findOrCreate(groupID string) *liveGroup {
 	return lg
 }
 
+// mutatePersisted runs fn with the offset store's lock held, and is the only
+// way the coordinator is allowed to change a liveGroup's persisted GroupState.
+//
+// A GroupState is one JSON document: Persist serializes the members map and
+// the offsets map in a single marshal, and the offsets half is written by
+// CommitOffset on another connection's goroutine. Rewriting members without
+// that lock let a commit serialize the map mid-edit, which Go reports as a
+// fatal "concurrent map read and map write" -- not a panic a caller can
+// recover from -- and which the race detector reports as a data race on the
+// map header itself.
+//
+// Reads of persisted state deliberately do not take the store lock: members
+// are only ever written here, under g.mu as well as the store lock, so any
+// reader already holding g.mu is excluded from a writer.
+//
+// Caller must hold g.mu. Lock order is g.mu then the store lock, which is the
+// order g.store.Get and g.store.Persist already take them in.
+func (g *GroupCoordinator) mutatePersisted(fn func()) {
+	g.store.mu.Lock()
+	defer g.store.mu.Unlock()
+	fn()
+}
+
 // evictExpired removes any member whose heartbeat is older than
 // the eviction threshold (or who has no heartbeat record at all).
 // Caller must hold g.mu. Returns true if any member was evicted
@@ -177,38 +200,40 @@ func (g *GroupCoordinator) evictExpired(lg *liveGroup, now time.Time) bool {
 	}
 	evicted := false
 	const fastEvictionThreshold = 3 * time.Second
-	for memberID, m := range lg.persisted.Members {
-		hb, ok := lg.heartbeats[memberID]
-		if !ok {
-			// No heartbeat record on this broker process, member
-			// predates this broker's lifetime. Evict.
-			delete(lg.persisted.Members, memberID)
-			if lg.leader == memberID {
-				lg.leader = ""
+	g.mutatePersisted(func() {
+		for memberID, m := range lg.persisted.Members {
+			hb, ok := lg.heartbeats[memberID]
+			if !ok {
+				// No heartbeat record on this broker process, member
+				// predates this broker's lifetime. Evict.
+				delete(lg.persisted.Members, memberID)
+				if lg.leader == memberID {
+					lg.leader = ""
+				}
+				evicted = true
+				continue
 			}
-			evicted = true
-			continue
-		}
-		// Default session timeout: 30s if member didn't specify.
-		sto := time.Duration(m.SessionTimeoutMS) * time.Millisecond
-		if sto <= 0 {
-			sto = 30 * time.Second
-		}
-		// Use the shorter of session_timeout and the fast threshold
-		// so crash-looping clients don't accumulate stale members.
-		evictAfter := sto
-		if fastEvictionThreshold < evictAfter {
-			evictAfter = fastEvictionThreshold
-		}
-		if now.Sub(hb) > evictAfter {
-			delete(lg.persisted.Members, memberID)
-			delete(lg.heartbeats, memberID)
-			evicted = true
-			if lg.leader == memberID {
-				lg.leader = ""
+			// Default session timeout: 30s if member didn't specify.
+			sto := time.Duration(m.SessionTimeoutMS) * time.Millisecond
+			if sto <= 0 {
+				sto = 30 * time.Second
+			}
+			// Use the shorter of session_timeout and the fast threshold
+			// so crash-looping clients don't accumulate stale members.
+			evictAfter := sto
+			if fastEvictionThreshold < evictAfter {
+				evictAfter = fastEvictionThreshold
+			}
+			if now.Sub(hb) > evictAfter {
+				delete(lg.persisted.Members, memberID)
+				delete(lg.heartbeats, memberID)
+				evicted = true
+				if lg.leader == memberID {
+					lg.leader = ""
+				}
 			}
 		}
-	}
+	})
 	return evicted
 }
 
@@ -273,16 +298,17 @@ func (g *GroupCoordinator) JoinGroup(args JoinGroupArgs) (*JoinGroupResult, erro
 	if lg.persisted == nil {
 		lg.persisted = g.store.Get(args.GroupID)
 	}
-	if lg.persisted.Members == nil {
-		lg.persisted.Members = make(map[string]*MemberState)
-	}
+	g.mutatePersisted(func() {
+		if lg.persisted.Members == nil {
+			lg.persisted.Members = make(map[string]*MemberState)
+		}
+	})
 
-	memberID := args.MemberID
-	if memberID == "" {
-		// A member with no id is a fresh process. Evict any prior
-		// incarnation carrying the same client id, whose last heartbeat is
-		// too recent for the liveness sweep to have collected it yet.
-		if args.ClientID != "" {
+	// A member with no id is a fresh process. Evict any prior
+	// incarnation carrying the same client id, whose last heartbeat is
+	// too recent for the liveness sweep to have collected it yet.
+	if args.MemberID == "" && args.ClientID != "" {
+		g.mutatePersisted(func() {
 			for existingID, existing := range lg.persisted.Members {
 				if existing.ClientID != args.ClientID {
 					continue
@@ -293,7 +319,11 @@ func (g *GroupCoordinator) JoinGroup(args JoinGroupArgs) (*JoinGroupResult, erro
 					lg.leader = ""
 				}
 			}
-		}
+		})
+	}
+
+	memberID := args.MemberID
+	if memberID == "" {
 		memberID = newMemberID(args.ClientID)
 
 		// KIP-394: from JoinGroup v4 the coordinator issues the member id
@@ -341,15 +371,17 @@ func (g *GroupCoordinator) JoinGroup(args JoinGroupArgs) (*JoinGroupResult, erro
 	for _, pr := range args.Protocols {
 		names = append(names, pr.Name)
 	}
-	lg.persisted.Members[memberID] = &MemberState{
-		MemberID:           memberID,
-		ClientID:           args.ClientID,
-		ClientHost:         args.ClientHost,
-		SessionTimeoutMS:   args.SessionTimeoutMS,
-		RebalanceTimeoutMS: args.RebalanceTimeoutMS,
-		Subscription:       subBytes,
-		Protocols:          names,
-	}
+	g.mutatePersisted(func() {
+		lg.persisted.Members[memberID] = &MemberState{
+			MemberID:           memberID,
+			ClientID:           args.ClientID,
+			ClientHost:         args.ClientHost,
+			SessionTimeoutMS:   args.SessionTimeoutMS,
+			RebalanceTimeoutMS: args.RebalanceTimeoutMS,
+			Subscription:       subBytes,
+			Protocols:          names,
+		}
+	})
 	lg.heartbeats[memberID] = now
 	lg.protocolType = args.ProtocolType
 	lg.protocols = args.Protocols
@@ -413,32 +445,35 @@ func (g *GroupCoordinator) closeRound(lg *liveGroup, round *rebalanceRound) {
 	round.closed = true
 
 	// Members that never joined this round are gone.
-	for id := range lg.persisted.Members {
-		if !round.joined[id] {
-			delete(lg.persisted.Members, id)
-			delete(lg.heartbeats, id)
-			if lg.leader == id {
-				lg.leader = ""
+	var members []JoinGroupMember
+	g.mutatePersisted(func() {
+		for id := range lg.persisted.Members {
+			if !round.joined[id] {
+				delete(lg.persisted.Members, id)
+				delete(lg.heartbeats, id)
+				if lg.leader == id {
+					lg.leader = ""
+				}
 			}
 		}
-	}
 
-	if _, present := lg.persisted.Members[lg.leader]; lg.leader == "" || !present {
-		lg.leader = pickLeader(lg.persisted.Members)
-	}
+		if _, present := lg.persisted.Members[lg.leader]; lg.leader == "" || !present {
+			lg.leader = pickLeader(lg.persisted.Members)
+		}
 
-	lg.persisted.Generation++
-	lg.persisted.Leader = lg.leader
-	lg.persisted.ProtocolType = lg.protocolType
-	lg.persisted.Protocol = pickCommonProtocol(lg)
+		lg.persisted.Generation++
+		lg.persisted.Leader = lg.leader
+		lg.persisted.ProtocolType = lg.protocolType
+		lg.persisted.Protocol = pickCommonProtocol(lg)
+
+		// The leader alone receives the membership list; that is what lets it
+		// compute an assignment that covers every member exactly once.
+		members = make([]JoinGroupMember, 0, len(lg.persisted.Members))
+		for _, mm := range lg.persisted.Members {
+			members = append(members, JoinGroupMember{MemberID: mm.MemberID, Metadata: mm.Subscription})
+		}
+	})
 	lg.state = GroupCompletingRebalance
-
-	// The leader alone receives the membership list; that is what lets it
-	// compute an assignment that covers every member exactly once.
-	members := make([]JoinGroupMember, 0, len(lg.persisted.Members))
-	for _, mm := range lg.persisted.Members {
-		members = append(members, JoinGroupMember{MemberID: mm.MemberID, Metadata: mm.Subscription})
-	}
 	sort.Slice(members, func(i, j int) bool { return members[i].MemberID < members[j].MemberID })
 
 	for id := range round.joined {
@@ -553,11 +588,13 @@ func (g *GroupCoordinator) SyncGroup(args SyncGroupArgs) (*SyncGroupResult, erro
 	round := lg.round
 
 	if args.MemberID == lg.leader {
-		for mid, a := range args.Assignments {
-			if mm, ok := lg.persisted.Members[mid]; ok {
-				mm.Assignment = a
+		g.mutatePersisted(func() {
+			for mid, a := range args.Assignments {
+				if mm, ok := lg.persisted.Members[mid]; ok {
+					mm.Assignment = a
+				}
 			}
-		}
+		})
 		lg.state = GroupStable
 		if err := g.store.Persist(lg.persisted); err != nil {
 			g.mu.Unlock()
@@ -643,13 +680,17 @@ func (g *GroupCoordinator) LeaveGroup(groupID, memberID string) int16 {
 	if _, ok := lg.persisted.Members[memberID]; !ok {
 		return unknownMember
 	}
-	delete(lg.persisted.Members, memberID)
-	delete(lg.heartbeats, memberID)
-	if lg.leader == memberID {
-		lg.leader = pickLeader(lg.persisted.Members)
-		lg.persisted.Leader = lg.leader
-	}
-	if len(lg.persisted.Members) == 0 {
+	empty := false
+	g.mutatePersisted(func() {
+		delete(lg.persisted.Members, memberID)
+		delete(lg.heartbeats, memberID)
+		if lg.leader == memberID {
+			lg.leader = pickLeader(lg.persisted.Members)
+			lg.persisted.Leader = lg.leader
+		}
+		empty = len(lg.persisted.Members) == 0
+	})
+	if empty {
 		lg.state = GroupEmpty
 	} else {
 		lg.state = GroupPreparingRebalance
