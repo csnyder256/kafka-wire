@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -24,7 +25,6 @@ func TestGroupLagDoesNotRaceConcurrentCommits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("storage.Open: %v", err)
 	}
-	defer func() { _ = st.Close() }()
 
 	brk := broker.New(broker.Config{
 		BrokerID:       1,
@@ -38,6 +38,14 @@ func TestGroupLagDoesNotRaceConcurrentCommits(t *testing.T) {
 	if err := brk.LoadState(); err != nil {
 		t.Fatalf("LoadState: %v", err)
 	}
+	// Close the partition files and release the data directory before the test
+	// returns. t.TempDir removes the directory on the way out, and Windows
+	// refuses to unlink a file another handle still has open, so a broker left
+	// running here fails the test in cleanup rather than in an assertion.
+	defer func() {
+		_ = brk.Drain(context.Background())
+		_ = st.Close()
+	}()
 	if _, err := brk.CreateTopic("orders", 2, 1); err != nil {
 		t.Fatalf("CreateTopic: %v", err)
 	}
