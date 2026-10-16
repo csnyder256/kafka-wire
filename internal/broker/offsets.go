@@ -150,7 +150,29 @@ func (s *OffsetStore) All() []*GroupState {
 
 // Persist atomically flushes one group's state to disk. Called after
 // each OffsetCommit and after each successful SyncGroup.
+//
+// The store's lock is held for the whole write, and that is load-bearing
+// rather than tidy. The state being serialized is the same GroupState
+// CommitOffset mutates, and every caller of this method runs on its own
+// connection goroutine, so two consumers committing offsets for one group at
+// the same time -- the ordinary case for any group with more than one
+// consumer -- used to produce three separate failures, all reproducible:
+//
+//   - json.MarshalIndent walks the offsets map while the other goroutine
+//     writes an entry into it. Go treats that as a fatal runtime error
+//     ("concurrent map read and map write"), not a recoverable panic, so the
+//     whole broker process dies.
+//   - both writers use the same "<group>.json.tmp" path, so whichever renames
+//     second finds the temp file already gone. The commit it was persisting
+//     had already been recorded in memory, so the wire layer reported the
+//     rename error as CORRUPT_MESSAGE on a commit that actually succeeded.
+//   - the loser's bytes can reach that shared temp file before the winner
+//     renames it, which persists a truncated document that NewOffsetStore
+//     refuses to parse at boot -- a broker that will not start until the file
+//     is repaired by hand.
 func (s *OffsetStore) Persist(gs *GroupState) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	gs.UpdatedAt = time.Now().UnixMilli()
 	raw, err := json.MarshalIndent(gs, "", "  ")
 	if err != nil {
