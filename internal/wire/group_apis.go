@@ -23,11 +23,11 @@ func hexHead(buf []byte, n int) string {
 //
 // Kafka requires READ on the group for JoinGroup, SyncGroup, Heartbeat,
 // LeaveGroup, OffsetCommit and OffsetFetch. This broker enforced it on
-// JoinGroup, OffsetCommit, OffsetFetch and DescribeGroups and left the other
-// three open, so once ACLs were configured a principal with no entry for a
-// group could still drive that group's membership: Heartbeat kept a stale
-// member "alive", SyncGroup handed out assignments, and LeaveGroup evicted a
-// live consumer and forced the group into a rebalance. That is a cross-tenant
+// JoinGroup, OffsetCommit and DescribeGroups and left the other three open, so
+// once ACLs were configured a principal with no entry for a group could still
+// drive that group's membership: Heartbeat kept a stale member "alive",
+// SyncGroup handed out assignments, and LeaveGroup evicted a live consumer and
+// forced the group into a rebalance. That is a cross-tenant
 // denial of service on somebody else's consumer group, and docs/security.md
 // already promises authorization on the consumer group APIs.
 //

@@ -11,14 +11,13 @@ import (
 // These tests pin the ACL enforcement on the three consumer-group membership
 // APIs that did not have it.
 //
-// JoinGroup, OffsetCommit, OffsetFetch and DescribeGroups all check the
-// caller's grant on the group. SyncGroup, Heartbeat and LeaveGroup did not, so
-// once ACLs were configured a principal with no entry for a group could still
-// drive that group's membership: keep a stale member "alive" with Heartbeat,
-// hand it an assignment with SyncGroup, or evict a live consumer with
-// LeaveGroup -- a cross-tenant denial of service on somebody else's consumer
-// group. docs/security.md already promises authorization on "the consumer
-// group APIs".
+// JoinGroup, OffsetCommit and DescribeGroups check the caller's grant on the
+// group. SyncGroup, Heartbeat and LeaveGroup did not, so once ACLs were
+// configured a principal with no entry for a group could still drive that
+// group's membership: keep a stale member "alive" with Heartbeat, hand it an
+// assignment with SyncGroup, or evict a live consumer with LeaveGroup -- a
+// cross-tenant denial of service on somebody else's consumer group.
+// docs/security.md already promises authorization on "the consumer group APIs".
 //
 // The tests drive the REAL handlers over a real connection and assert on the
 // bytes that leave the broker, so they cannot pass on a struct the test built
