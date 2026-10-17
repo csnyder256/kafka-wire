@@ -8,7 +8,13 @@ go 1.26.0
 // Go 1.26.0 itself and shipped standard-library CVEs fixed in later patch
 // releases. Bump it when a new 1.26.x ships; the govulncheck job in CI
 // fails when the pinned standard library has a known reachable CVE.
-toolchain go1.26.8
+//
+// Every workflow reaches the toolchain through this one line
+// (go-version-file: go.mod), so it is the only lever -- nothing hardcodes a
+// Go version separately. The golang.org/x/net advisories govulncheck also
+// lists are not reachable from this code and do not fail the job; only the
+// standard-library pin does, which is why bumping it is the whole fix.
+toolchain go1.26.9
 
 require (
 	github.com/golang/snappy v1.0.0
