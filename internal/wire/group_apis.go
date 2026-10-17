@@ -18,6 +18,27 @@ func hexHead(buf []byte, n int) string {
 	return hex.EncodeToString(buf[:n])
 }
 
+// groupAuthorized reports whether the connection's principal holds the group
+// grant that every consumer-group membership operation requires.
+//
+// Kafka requires READ on the group for JoinGroup, SyncGroup, Heartbeat,
+// LeaveGroup, OffsetCommit and OffsetFetch. This broker enforced it on
+// JoinGroup, OffsetCommit, OffsetFetch and DescribeGroups and left the other
+// three open, so once ACLs were configured a principal with no entry for a
+// group could still drive that group's membership: Heartbeat kept a stale
+// member "alive", SyncGroup handed out assignments, and LeaveGroup evicted a
+// live consumer and forced the group into a rebalance. That is a cross-tenant
+// denial of service on somebody else's consumer group, and docs/security.md
+// already promises authorization on the consumer group APIs.
+//
+// An absent ACL store (or an empty one) means ACLs are not configured, and
+// every caller is allowed -- the same rule the other handlers use, so the
+// no-ACL deployment is untouched.
+func (d *Dispatcher) groupAuthorized(state *connState, group string) bool {
+	acl := d.brk.ACL()
+	return acl == nil || acl.AuthorizeGroup(state.saslPrincipal, group, "read")
+}
+
 // FindCoordinator. Single-node mode: we are the coordinator for all
 // groups. Always return our own broker_id + advertised endpoint.
 func (d *Dispatcher) handleFindCoordinator(state *connState, hdr RequestHeader, body []byte) error {
@@ -147,6 +168,15 @@ func (d *Dispatcher) handleSyncGroup(state *connState, hdr RequestHeader, body [
 	if err := req.ReadFrom(body); err != nil {
 		return err
 	}
+	// Same group grant JoinGroup demanded to let this member in. Without it a
+	// principal with no entry for the group could drive the leader's half of
+	// the rebalance.
+	if !d.groupAuthorized(state, req.Group) {
+		resp := kmsg.NewPtrSyncGroupResponse()
+		resp.SetVersion(hdr.APIVersion)
+		resp.ErrorCode = errCodeGroupAuthorizationFailed
+		return d.writeKmsgResponse(state, hdr, resp, req.IsFlexible())
+	}
 	asgs := make(map[string][]byte, len(req.GroupAssignment))
 	for _, a := range req.GroupAssignment {
 		asgs[a.MemberID] = a.MemberAssignment
@@ -189,6 +219,15 @@ func (d *Dispatcher) handleHeartbeat(state *connState, hdr RequestHeader, body [
 	if err := req.ReadFrom(body); err != nil {
 		return err
 	}
+	// A heartbeat is a write to the group's liveness state: it can keep a
+	// member that should have expired looking alive, so it needs the same
+	// group grant the rest of the membership path does.
+	if !d.groupAuthorized(state, req.Group) {
+		resp := kmsg.NewPtrHeartbeatResponse()
+		resp.SetVersion(hdr.APIVersion)
+		resp.ErrorCode = errCodeGroupAuthorizationFailed
+		return d.writeKmsgResponse(state, hdr, resp, req.IsFlexible())
+	}
 	args := broker.HeartbeatArgs{
 		GroupID:    req.Group,
 		MemberID:   req.MemberID,
@@ -211,6 +250,21 @@ func (d *Dispatcher) handleLeaveGroup(state *connState, hdr RequestHeader, body 
 	}
 	resp := kmsg.NewPtrLeaveGroupResponse()
 	resp.SetVersion(hdr.APIVersion)
+
+	// Leaving is the destructive membership call: it removes the member and
+	// forces the rest of the group into a rebalance. Refuse it for a principal
+	// with no grant on the group, shaped per version -- v0-v2 carries a single
+	// top-level code, v3+ carries one code per requested member.
+	if !d.groupAuthorized(state, req.Group) {
+		resp.ErrorCode = errCodeGroupAuthorizationFailed
+		for _, m := range req.Members {
+			resp.Members = append(resp.Members, kmsg.LeaveGroupResponseMember{
+				MemberID:  m.MemberID,
+				ErrorCode: errCodeGroupAuthorizationFailed,
+			})
+		}
+		return d.writeKmsgResponse(state, hdr, resp, req.IsFlexible())
+	}
 
 	if req.MemberID != "" {
 		resp.ErrorCode = d.brk.Groups().LeaveGroup(req.Group, req.MemberID)
