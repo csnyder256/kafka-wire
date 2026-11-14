@@ -237,7 +237,7 @@ jobs:
           touch site/.nojekyll
       - name: Upload dashboard site
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with: { path: site }
 
   pages:
@@ -257,4 +257,4 @@ jobs:
     steps:
       - name: Deploy tested dashboard
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
